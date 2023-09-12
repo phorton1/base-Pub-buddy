@@ -88,12 +88,13 @@
 #   ctrl-L = used to update the rpi SD memory card
 #       in the laptop memory card slot (nothing to do with buddy)
 
-
+use lib '.';
 
 use strict;
 use warnings;
 use threads;
 use threads::shared;
+use Cava::Packager;
 use Socket;
 use Time::HiRes qw( sleep usleep  );
 use Win32::Console;
@@ -102,13 +103,13 @@ use Win32::Process::Info qw{NT};
 use Win32::SerialPort qw(:STAT);
 use IO::Socket::INET;
 use Net::Telnet;
-use lib '.';
+use Pub::Utils;
 use Pub::FS::RemoteServer;
 use Pub::FS::SessionRemote;
 use buddy_Colors;
 use buddy_Binary;
 use buddy_Grab;
-use Pub::Utils;
+
 
 my $dbg_fileserver = 0;
 	# 0 = show file commands sent and replies recieved
@@ -258,7 +259,8 @@ else
 
 if ($start_file_server)
 {
-	$file_server = Pub::FS::RemoteServer->new();
+	my $params = $COM_PORT ? { PORT => $DEFAULT_PORT + $COM_PORT } : '';
+	$file_server = Pub::FS::RemoteServer->new($params);
 }
 
 
@@ -842,10 +844,30 @@ while (1)
 
 		if (defined($char))
 		{
-			if ($con && ord($char) == 4)            # CTRL-D
+
+			if ($con && ord($char) == 4)            				# CTRL-D
 			{
 				$con->Cls();    # manually clear the screen
 			}
+			elsif ($con && $file_server && ord($char) == 5)         # CTRL-E
+			{
+				# pop up the fileClient
+
+				my $port = $DEFAULT_PORT + $COM_PORT;
+
+				# print "PACKAGED=".Cava::Packager::IsPackaged()."\n";	# 0 or 1
+				# print "BIN_PATH=".Cava::Packager::GetBinPath()."\n";	# executable directory
+				# print "EXE_PATH=".Cava::Packager::GetExePath()."\n";	# full executable pathname
+				# print "EXE=".Cava::Packager::GetExecutable()."\n";		# leaf executable filename
+
+				my $command = Cava::Packager::IsPackaged() ?
+					Cava::Packager::GetBinPath()."/fileClient.exe $port" :
+					"perl /base/Pub/FS/fileClient.pm $port";
+
+				my $pid = system 1, $command;
+				display($dbg_fileserver,0,"fileClient pid="._def($pid));
+			}
+
 
 			# A binary upoad can be triggered if the circl rPI *happens*
 			# to be in the few seconds after booting where it is showing
