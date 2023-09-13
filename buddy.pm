@@ -88,7 +88,7 @@
 #   ctrl-L = used to update the rpi SD memory card
 #       in the laptop memory card slot (nothing to do with buddy)
 
-use lib '.';
+use lib '.','/base/apps/buddy';
 
 use strict;
 use warnings;
@@ -508,7 +508,7 @@ sub systemCheck
 
 sub listen_for_arduino_thread
 	# watch for a process indicating an Arduino build is happening
-	# and disconnect the comm port if it is
+	# and set $in_arduino_build if it is
 {
     while (1)
     {
@@ -727,9 +727,10 @@ sub readProcessPort
 					elsif ($in_line =~ /^file_reply_end/)
 					{
 						display($dbg_fileserver+1,0,"setting file_server_reply==>$tmp_file_reply<==");
-						$file_reply_pending = 0;
+						display($dbg_fileserver,0,"file_reply end");
 						$file_server_reply = $tmp_file_reply;
 						$tmp_file_reply = '';
+						$file_reply_pending = 0;
 					}
 					$in_line = '';
 				}
@@ -830,7 +831,7 @@ while (1)
         # print "got event '@event'\n" if @event;
         if (@event && isEventCtrlC(@event))			# CTRL-C
         {
-            print "exiting console\n";
+            print "exiting buddy!\n";
             if ($port)
             {
                 $port->close();
