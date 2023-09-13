@@ -2,7 +2,9 @@
 #
 # command line
 #
-#   COM port number or IP addresss MUST be provided
+#   auto == let buddy figure out the best port/ip to use
+#
+#   COM port number or IP addresss MUST be provided if not AUTO
 #
 #      If an IP address is provided, it may optionally include a port
 #
@@ -104,6 +106,8 @@ use Win32::SerialPort qw(:STAT);
 use IO::Socket::INET;
 use Net::Telnet;
 use Pub::Utils;
+use Pub::ComPorts;
+use Pub::SSDPScan;
 use Pub::FS::RemoteServer;
 use Pub::FS::SessionRemote;
 use buddy_Colors;
@@ -114,9 +118,12 @@ use buddy_Grab;
 my $dbg_fileserver = 0;
 	# 0 = show file commands sent and replies recieved
 	# -1 = show debuffered file replies
+my $dbg_auto = 0;
+
 
 $| = 1;     # IMPORTANT - TURN PERL BUFFERING OFF MAGIC
 
+my $SSDP_TIMEOUT = 15;
 
 my $TELNET_PORT = 23;
 	# Default TCP/IP port is TELNET.
@@ -150,9 +157,9 @@ my $registry_filetime = getFileTime($registry_filename);
 my $COM_PORT = 0;
 my $BAUD_RATE = $DEFAULT_BAUD_RATE;
 
+my $auto = 0;
 my $crlf = 0;
 my $rpi = 0;
-
 my $arduino = 0;
 my $sock_ip = '';
 my $sock_port = 0;
@@ -172,6 +179,7 @@ $con->Attr($COLOR_CONSOLE);
 my $port;
 my $sock;
 my $in_arduino_build:shared = 0;
+my $ssdp_found:shared = '';
 
 my $kernel_filename = '';
 my $kernel_filetime = 0;
@@ -194,7 +202,11 @@ while ($arg_num < @ARGV)
     if ($arg =~ /^-(.*)/)
     {
 		my $val = $1;
-		if ($val eq 'rpi')
+		if ($val eq 'auto')
+		{
+			$auto = 1;
+		}
+		elsif ($val eq 'rpi')
 		{
 			$rpi = 1;
 		}
@@ -242,6 +254,19 @@ while ($arg_num < @ARGV)
 	}
 }
 
+
+checkAuto() if $auto;
+
+if (!$COM_PORT && !$sock_ip)
+{
+	error($auto ?
+		  "Could not find any ports or remote devices to connect to!" :
+		  "PORT or IP address must be specified!!");
+	print "Hit any key to close window -->";
+	getc();
+	exit(0);
+}
+
 print "-rpi\n" if ($rpi);
 print "-crlf\n" if ($crlf);
 print "-arduino\n" if $arduino;
@@ -262,6 +287,89 @@ if ($start_file_server)
 	my $params = $COM_PORT ? { PORT => $DEFAULT_PORT + $COM_PORT } : '';
 	$file_server = Pub::FS::RemoteServer->new($params);
 }
+
+
+#--------------------------------------------------
+# checkAuto
+#--------------------------------------------------
+
+
+sub onSSDPDevice
+{
+    my ($rec) = @_;
+    if (!$ssdp_found)
+    {
+		my $iot_device = $rec->{SERVER} =~ /myIOTDevice UPNP\/1.1 (.*)\// ? $1 :
+			$rec->{SERVER} ? $rec->{SERVER} :
+			$rec->{ST} ? $rec->{ST} :
+			"unknown device";
+	    display($dbg_auto,0,"onSSDPDevice($rec->{ip}) = $iot_device");
+		$ssdp_found = shared_clone([$rec->{ip}, $iot_device]);
+    }
+}
+
+
+sub checkAuto
+{
+	my $started = Pub::SSDPScan::start($SEARCH_MYIOT,\&onSSDPDevice,28);
+	my $ports = Pub::ComPorts::find();
+	my $ssdp_started = time();
+
+	if ($ports)
+	{
+		my $found_any = '';
+		my $found_TE = '';
+		my $found_arduino = '';
+		for my $port (keys %$ports)
+		{
+			my $rec = $ports->{$port};
+			$found_any ||= $rec;
+			$found_TE = $rec if $rec->{midi_name} eq "teensyExpressionv2";
+			$found_arduino = $rec if $rec->{device} =~ /teensy|arduino|esp32/i;
+		}
+
+		if ($found_TE)
+		{
+			print "found TE $found_TE->{device} on COM$found_TE->{num}\n";
+			$arduino = 1;
+			$start_file_server = 1;
+			$COM_PORT = $found_TE->{num};
+		}
+		elsif ($found_arduino)
+		{
+			print "found ARDUINO $found_arduino->{device} on COM$found_arduino->{num}\n";
+			$arduino = 1;
+			$crlf = 1 if $found_arduino->{device} =~ /ESP32/i;
+			$COM_PORT = $found_arduino->{num};
+		}
+		elsif ($found_any)
+		{
+
+			print "found COM$found_any->{num} VID($found_any->{VID}) PID($found_any->{PID})\n";
+			$COM_PORT = $found_any->{num};
+		}
+		else
+		{
+			my $now = time();
+			while (!$ssdp_found && $now < $ssdp_started + $SSDP_TIMEOUT)
+			{
+				my $secs = $SSDP_TIMEOUT - ($now - $ssdp_started);
+				print "Searching for remote devices($secs) ...\n";
+				sleep(2);
+				$now = time()
+			}
+			if ($ssdp_found)
+			{
+				print "found REMOTE $ssdp_found->[1] at $ssdp_found->[0]\n";
+				$sock_ip = "$ssdp_found->[0]:$TELNET_PORT";
+				$crlf = 1;
+			}
+		}
+	}
+
+	Pub::SSDPScan::stop() if $started;
+}
+
 
 
 #---------------------------------------------------
@@ -650,8 +758,6 @@ sub readProcessPort
 	{
 		my $c = substr($buf,$i,1);
 
-		# printf "chr(%02x) '%s'\n",ord($c),ord($c)>32?$c:' ';
-
 		if ($in_screen_grab)
 		{
 			handleScreenGrab($c);
@@ -659,7 +765,6 @@ sub readProcessPort
 		elsif ($esc_cmd)
 		{
 			$esc_cmd .= $c;
-			# print("adding escape command(".ord($c).")=$c\n");
 			if ($esc_cmd =~ /\x1b\[(\d+)m/)
 			{
 				my $color = $1;
@@ -686,23 +791,38 @@ sub readProcessPort
 				$esc_cmd = '';
 			}
 		}
-		elsif (ord($c) == 27)
+
+		# escape commands cannot be sent in the middle of line
+
+		elsif (!$in_line && ord($c) == 27)
 		{
 			# print("starting escape command\n");
 			$esc_cmd = $c;
 			$is_esc_line = 1;
 		}
-		else	# default line/character handler
+
+		else  # default character handler
 		{
-			$in_line .= $c;
-			print $c if $is_esc_line;
-			# print $c if !$file_reply_pending || $is_esc_line;
-			$con->Attr($COLOR_CONSOLE) if (ord($c) == 13 || ord($c) == 10);
+			# we now require crlf to indicate the end of a line
 
-			# We use chr(10) (LINEFEED) to signal that a full line of text is
-			# completed and certain functions may be triggered
+			# under the assumption that no-one will send us a 'command'
+			# in the middle of an 'escape line', if this is an 'escape line'
+			# we print the individual characters so that we can get
+			# progress thingees ...
 
-			if (ord($c) == 10)
+			if ($is_esc_line)
+			{
+				print $c;					# including cr and/or lf
+				if (ord($c) == 10)			# we have finished the line
+				{
+					$con->Attr($COLOR_CONSOLE);
+					$is_esc_line = 0;
+				}
+			}
+
+			# otherwise, we build a line into the buffer and deal with it on chr(10)
+
+			elsif (ord($c) == 10)
 			{
 				# display(0,0,"inline=$in_line");
 
@@ -716,28 +836,35 @@ sub readProcessPort
 					$screen_grab = '';
 					$in_line = '';
 				}
-				elsif ($file_reply_pending)
+				elsif ($file_reply_pending && $in_line =~ s/^file_reply://)
 				{
-					if ($in_line =~ s/^file_reply://)
-					{
-						while ($in_line =~ s/\n|\r//g) {}
-						display($dbg_fileserver,0,"file_reply: $in_line");
-						$tmp_file_reply .= $in_line."\n";
-					}
-					elsif ($in_line =~ /^file_reply_end/)
-					{
-						display($dbg_fileserver+1,0,"setting file_server_reply==>$tmp_file_reply<==");
-						display($dbg_fileserver,0,"file_reply end");
-						$file_server_reply = $tmp_file_reply;
-						$tmp_file_reply = '';
-						$file_reply_pending = 0;
-					}
-					$in_line = '';
+					while ($in_line =~ s/\n|\r//g) {}
+					display($dbg_fileserver,0,"file_reply: $in_line");
+					$tmp_file_reply .= $in_line."\n";
+				}
+				elsif ($file_reply_pending && $in_line =~ /^file_reply_end/)
+				{
+					display($dbg_fileserver+1,0,"setting file_server_reply==>$tmp_file_reply<==");
+					display($dbg_fileserver,0,"file_reply end");
+					$file_server_reply = $tmp_file_reply;
+					$tmp_file_reply = '';
+					$file_reply_pending = 0;
+				}
+				else	# case where a printable line DID NOT start with an escape sequence
+				{
+					print $in_line."\n";
+					$con->Attr($COLOR_CONSOLE);
 				}
 
-				$is_esc_line = 0;
+				$in_line = '';
+			}
 
-			}	# chr(10)
+			elsif (ord($c) != 13)
+			{
+				$in_line .= $c;
+			}
+
+
 		}	# default character handler
 	}	# for each byte
 
