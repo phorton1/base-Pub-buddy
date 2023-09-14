@@ -147,12 +147,11 @@ use IO::Socket::INET;
 use Net::Telnet;
 use Pub::Utils;
 use Pub::SSDPScan;
-# use Pub::FS::RemoteServer;
-# use Pub::FS::SessionRemote;
 use Pub::Buddy::boxColors;
 use Pub::Buddy::boxBinary;
 use Pub::Buddy::boxGrab;
 use Pub::Buddy::buddyServer;
+use Pub::Buddy::buddyServerSession;
 
 $temp_dir = '/base/temp';
 
@@ -620,20 +619,23 @@ sub listen_for_arduino_thread
 
 sub startBuddyApp
 {
+	# return;
+
 	# print "PACKAGED=".Cava::Packager::IsPackaged()."\n";	# 0 or 1
 	# print "BIN_PATH=".Cava::Packager::GetBinPath()."\n";	# executable directory
 	# print "EXE_PATH=".Cava::Packager::GetExePath()."\n";	# full executable pathname
 	# print "EXE=".Cava::Packager::GetExecutable()."\n";		# leaf executable filename
 
-	while (!$INITIAL_PORT)
+	while (!$ACTUAL_SERVER_PORT)
 	{
+		display($dbg_process,-1,"waiting for ACTUAL_SERVER_PORT");
 		sleep(1);
 	}
 
-	display($dbg_process,-1,"STARTING buddyApp INITIAL_PORT=$INITIAL_PORT");
+	display($dbg_process,-1,"STARTING buddyApp INITIAL_PORT=$ACTUAL_SERVER_PORT");
 	my $command = Cava::Packager::IsPackaged() ?
-		Cava::Packager::GetBinPath()."/Buddy.exe $INITIAL_PORT" :
-		"perl /base/Pub/Buddy/BuddyApp.pm $INITIAL_PORT";
+		Cava::Packager::GetBinPath()."/Buddy.exe $ACTUAL_SERVER_PORT" :
+		"perl /base/Pub/Buddy/BuddyApp.pm $ACTUAL_SERVER_PORT";
 
 	$buddy_app_pid = system 1, $command;
 	display($dbg_process,0,"BuddyApp pid="._def($buddy_app_pid));
@@ -1013,7 +1015,7 @@ while (1)
 			{
 				$con->Cls();    # manually clear the screen
 			}
-			elsif ($con && !$SERVER_PORT && $INITIAL_PORT && ord($char) == 5)         # CTRL-E
+			elsif ($con && !$SERVER_PORT && ord($char) == 5)         # CTRL-E
 			{
 				startBuddyApp();
 			}

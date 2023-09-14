@@ -18,7 +18,7 @@ use Wx::Event qw(
 	EVT_IDLE );
 use Pub::Utils;
 use Pub::WX::Window;
-use Pub::Buddy::buddyClient;
+use Pub::Buddy::buddyClientSession;
 #use Pub::FS::SessionClient;
 #use Pub::FS::fileClientResources;
 #use Pub::FS::fileClientPane;
@@ -59,14 +59,14 @@ sub new
 
 	if (1)
 	{
-		$this->{client} = Pub::Buddy::buddyClient->new($data->{remote_port});
-		if (!$this->{client})
+		$this->{session} = Pub::Buddy::buddyClientSession->new({
+			PORT => $data->{remote_port}  });
+		if (!$this->{session})
 		{
 			error("Could not create client session!");
 			return;
 		}
-		display($dbg_tab,-1,"client started");
-		$this->{client}->sendPacket("HELLO");
+		display($dbg_tab,-1,"client session started");
 	}
 
 
@@ -161,7 +161,7 @@ sub onIdle
 {
     my ($this,$event) = @_;
 	# display($dbg_tab,0,"onIdle()");
-	my $packet = $this->{client} ? $this->{client}->getPacket() : '';
+	my $packet = $this->{session} ? $this->{session}->get_packet() : '';
 	if ($packet)
 	{
 		display($dbg_tab+1,-1,"got packet $packet");
