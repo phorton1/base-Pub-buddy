@@ -3,15 +3,15 @@
 # the main application object
 #-------------------------------------------------------------------------
 
-package Pub::FS::fileClientAppFrame;
+package Pub::Buddy::BuddyApp;
 use strict;
 use warnings;
 use Wx qw(:everything);
 use Wx::Event qw(EVT_MENU);
 use Pub::Utils;
 use Pub::WX::Frame;
-use Pub::FS::fileClientResources;
-use Pub::FS::fileClientWindow;
+use Pub::Buddy::appResources;
+use Pub::Buddy::winTab;
 use base qw(Pub::WX::Frame);
 
 
@@ -19,8 +19,8 @@ my $dbg_app = 0;
 
 $data_dir = '/base/temp';	# should be unused
 $temp_dir = '/base/temp';
-$logfile = "$temp_dir/fileClient2.log";
-$Pub::WX::AppConfig::ini_file = "$temp_dir/fileClient2.ini";
+$logfile = "$temp_dir/Buddy.log";
+$Pub::WX::AppConfig::ini_file = "$temp_dir/Buddy.ini";
 
 
 unlink $Pub::WX::AppConfig::ini_file;
@@ -41,7 +41,16 @@ sub onInit
     my ($this) = @_;
     $this->SUPER::onInit();
 	EVT_MENU($this, $COMMAND_CONNECT, \&commandConnect);
-	return if !$this->createPane($ID_CLIENT_WINDOW,undef,"test");
+	return if !$this->createPane($ID_CLIENT_WINDOW,undef,{
+			remote_port => $ARGV[0],
+			session_name => "TE(1)",
+			device_addr => 6,
+			device_name => 'teensyExpression',
+			arduino => 1,
+			file_server => 1,
+			local_dir => '/src/Arduino/teensyExpression2/data',
+			remote_dir => '/',
+		});
     return $this;
 }
 
@@ -51,15 +60,15 @@ sub createPane
 	# so config_str is unused
 {
 	my ($this,$id,$book,$data,$config_str) = @_;
-	display($dbg_app,0,"fileClient::createPane($id)".
+	display($dbg_app,0,"BuddyApp::createPane($id)".
 		" book="._def($book).
 		" data="._def($data));
 
 	if ($id == $ID_CLIENT_WINDOW)
 	{
-		return error("No name specified in fileClient::createPane()") if !$data;
+		return error("No name specified in BuddyApp::createPane()") if !$data;
 	    $book = $this->getOpenDefaultNotebook($id) if !$book;
-        return Pub::FS::fileClientWindow->new($this,$id,$book,$data);
+        return Pub::Buddy::winTab->new($this,$id,$book,$data);
     }
     return $this->SUPER::createPane($id,$book,$data,$config_str);
 }
@@ -71,7 +80,7 @@ sub createPane
 # CREATE AND RUN THE APPLICATION
 #----------------------------------------------------
 
-package Pub::FS::fileClientApp;
+package buddyApplication;
 use strict;
 use warnings;
 use Pub::Utils;
@@ -84,23 +93,23 @@ my $frame;
 
 sub OnInit
 {
-	$frame = Pub::FS::fileClientAppFrame->new();
-	unless ($frame) {print "unable to create frame"; return undef}
+	$frame = Pub::Buddy::BuddyApp->new();
+	unless ($frame) {print "unable to create BuddyApp"; return undef}
 	$frame->Show( 1 );
-	display(0,0,"fileClient.pm started");
+	display(0,0,"BuddyApp.pm started");
 	return 1;
 }
 
-my $app = Pub::FS::fileClientApp->new();
+my $app = buddyApplication->new();
 Pub::WX::Main::run($app);
 
 # This little snippet is required for my standard
 # applications (needs to be put into)
 
-display(0,0,"ending fileClient.pm ...");
+display(0,0,"ending BuddyApp.pm ...");
 $frame->DESTROY() if $frame;
 $frame = undef;
-display(0,0,"finished fileClient.pm");
+display(0,0,"finished BuddyApp.pm");
 
 
 

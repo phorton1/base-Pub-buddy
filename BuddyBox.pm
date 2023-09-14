@@ -1,10 +1,51 @@
-# Buddy - a Putty like Telnet CONSOLE with a fileClient window
+# BuddyBox - a Putty like Telnet CONSOLE
 #
-# command line
+# This is the initial entry point to the Buddy application,
+# as well as a window controlled by it.
 #
-#   auto == let buddy figure out the best port/ip to use
+# With no command line arguments, it will create a Server on a
+# random socket, and invoke BuddyApp with command line arguments
+# for its PID (process ID) and the port number.
+# The initial one contains the STDOUT from the app itself,
+# as well as owning the entire process tree.
 #
-#   COM port number or IP addresss MUST be provided if not AUTO
+# It will then wait for a configuration to be passed to
+# it via the Server.
+#
+# Subsequent BoddyBoxes will be invoked with at least
+# a SERVER_PORT parameter, but likely with a full command
+# line to save the traffic.
+#
+# All boxes except the initial one can be shut down by the User
+# via the App.  Closing the App will close all the BuddyBoxes
+# exapt the intial one, and if that is detected, we will enable
+# -E to pop up an App, but the BOX will continue running.
+#
+# Only the main box will be able to pop up a App, and only when one
+# is not already running.
+#
+# The user can shut down DOS BOXES .. that can't be prevented.
+# Some kind of notification (perhaps scanning process onIdle())
+# will need to happen to close those Tabs as they close the boxes.
+#
+# The main flaw, or danger, is that if a user shuts down the initial
+# window, they will shut down the whole process tree unexpectedly.
+#
+#--------------------------------------------------------------------
+
+
+
+#---------------------------------------------------------------------------
+# Command Line
+#---------------------------------------------------------------------------
+#
+#	-server_port NNNNN
+#
+#		if provided will start the server on the given port.
+#       if not, this is the initial BuddyBox and the SSDP server will
+#       also be started.
+#
+#   COM port number or IP addresss
 #
 #      If an IP address is provided, it may optionally include a port
 #
@@ -105,24 +146,29 @@ use Win32::SerialPort qw(:STAT);
 use IO::Socket::INET;
 use Net::Telnet;
 use Pub::Utils;
-use Pub::ComPorts;
 use Pub::SSDPScan;
-use Pub::FS::RemoteServer;
-use Pub::FS::SessionRemote;
-use Pub::buddy::buddy_Colors;
-use Pub::buddy::buddy_Binary;
-use Pub::buddy::buddy_Grab;
+# use Pub::FS::RemoteServer;
+# use Pub::FS::SessionRemote;
+use Pub::Buddy::boxColors;
+use Pub::Buddy::boxBinary;
+use Pub::Buddy::boxGrab;
+use Pub::Buddy::buddyServer;
+
+$temp_dir = '/base/temp';
 
 
+my $dbg_box = 0;
+	# generally 0 - user level notifications
+my $dbg_process = 0;
+	# debug the opening of BuddyApp
 my $dbg_fileserver = 0;
 	# 0 = show file commands sent and replies recieved
 	# -1 = show debuffered file replies
-my $dbg_auto = 0;
+
 
 
 $| = 1;     # IMPORTANT - TURN PERL BUFFERING OFF MAGIC
 
-my $SSDP_TIMEOUT = 15;
 
 my $TELNET_PORT = 23;
 	# Default TCP/IP port is TELNET.
@@ -147,23 +193,23 @@ my $registry_filename = "/base/bat/console_autobuild_kernel.txt";
 my $registry_filetime = getFileTime($registry_filename);
 
 
-
-
 #-----------------------
 # command line params
 #-----------------------
 
+my $SERVER_PORT = 0;
 my $COM_PORT = 0;
+my $SOCK_IP = '';
+my $SOCK_PORT = 0;
 my $BAUD_RATE = $DEFAULT_BAUD_RATE;
 
 my $auto = 0;
 my $crlf = 0;
 my $rpi = 0;
 my $arduino = 0;
-my $sock_ip = '';
-my $sock_port = 0;
-my $file_server = 0;
+
 my $start_file_server = 0;
+
 
 
 #-----------------------
@@ -178,209 +224,118 @@ $con->Attr($COLOR_CONSOLE);
 my $port;
 my $sock;
 my $in_arduino_build:shared = 0;
-my $ssdp_found:shared = '';
-
 my $kernel_filename = '';
 my $kernel_filetime = 0;
 my $kernel_file_changed = 0;
+my $server;
+my $ssdp_started;
+my $ssdp_found = {};
+my $buddy_app_pid;
+
+our $file_server_request:shared = '';
+our $file_server_reply:shared = '';
+our $file_reply_pending:shared = 0;
 
 
+#--------------------------------------------
+# processCommandLine
+#--------------------------------------------
 
-#---------------------------------------------------
-# process Command Line
-#---------------------------------------------------
-
-$con->Title("initializing ...");
-
-# parse command line
-
-my $arg_num = 0;
-while ($arg_num < @ARGV)
+sub processCommandLine
 {
-    my $arg = $ARGV[$arg_num++];
-    if ($arg =~ /^-(.*)/)
-    {
-		my $val = $1;
-		if ($val eq 'auto')
-		{
-			$auto = 1;
-		}
-		elsif ($val eq 'rpi')
-		{
-			$rpi = 1;
-		}
-		elsif ($val eq 'crlf')
-		{
-			$crlf = 1;
-		}
-		elsif ($val eq 'arduino')
-		{
-			$arduino = 1;
-		}
-		elsif ($val eq 'file_server')
-		{
-			$start_file_server = 1;
-		}
-		else
-		{
-			print "Illegal command line argument: -$arg\n";
-			exit 0;
-		}
-
-    }
-    elsif ($arg =~ /^\d+$/)
-    {
-        if ($arg >= 100)
-        {
-            $BAUD_RATE = $arg;
-        }
-        else
-        {
-            $COM_PORT = $arg;
-        }
-    }
-	elsif ($arg =~ /^(\d+\.\d+\.\d+\.\d+)(:(\d+))*$/)
+	my (@args) = @_;
+	my $arg_num = 0;
+	while ($arg_num < @args)
 	{
-		# Port 23 works with my ESP32 Telnet
-		# somewhere I have an implementation using port 80
-
-		($sock_ip,$sock_port) = ($1,$3);
-		$sock_port ||= $TELNET_PORT;
-
-		# default to echo/crlf
-
-		$crlf = 1;
-	}
-}
-
-
-checkAuto() if $auto;
-
-if (!$COM_PORT && !$sock_ip)
-{
-	error($auto ?
-		  "Could not find any ports or remote devices to connect to!" :
-		  "PORT or IP address must be specified!!");
-	print "Hit any key to close window -->";
-	getc();
-	exit(0);
-}
-
-print "-rpi\n" if ($rpi);
-print "-crlf\n" if ($crlf);
-print "-arduino\n" if $arduino;
-print "-file_server\n" if $start_file_server;
-
-if ($sock_ip)
-{
-	print "SOCKET: $sock_ip:$sock_port\n";
-}
-else
-{
-	print "COM$COM_PORT at $BAUD_RATE baud\n";
-}
-
-
-if ($start_file_server)
-{
-	my $params = $COM_PORT ? { PORT => $DEFAULT_PORT + $COM_PORT } : '';
-	$file_server = Pub::FS::RemoteServer->new($params);
-}
-
-
-#--------------------------------------------------
-# checkAuto
-#--------------------------------------------------
-
-
-sub onSSDPDevice
-{
-    my ($rec) = @_;
-    if (!$ssdp_found)
-    {
-		my $iot_device = $rec->{SERVER} =~ /myIOTDevice UPNP\/1.1 (.*)\// ? $1 :
-			$rec->{SERVER} ? $rec->{SERVER} :
-			$rec->{ST} ? $rec->{ST} :
-			"unknown device";
-	    display($dbg_auto,0,"onSSDPDevice($rec->{ip}) = $iot_device");
-		$ssdp_found = shared_clone([$rec->{ip}, $iot_device]);
-    }
-}
-
-
-sub checkAuto
-{
-	my $started = Pub::SSDPScan::start($SEARCH_MYIOT,\&onSSDPDevice,28);
-	my $ports = Pub::ComPorts::find();
-	my $ssdp_started = time();
-
-	if ($ports)
-	{
-		my $found_any = '';
-		my $found_TE = '';
-		my $found_arduino = '';
-		for my $port (keys %$ports)
+		my $arg = $args[$arg_num++];
+		if ($arg =~ /^-(.*)/)
 		{
-			my $rec = $ports->{$port};
-			$found_any ||= $rec;
-			$found_TE = $rec if $rec->{midi_name} eq "teensyExpressionv2";
-			$found_arduino = $rec if $rec->{device} =~ /teensy|arduino|esp32/i;
-		}
-
-		if ($found_TE)
-		{
-			print "found TE $found_TE->{device} on COM$found_TE->{num}\n";
-			$arduino = 1;
-			$start_file_server = 1;
-			$COM_PORT = $found_TE->{num};
-		}
-		elsif ($found_arduino)
-		{
-			print "found ARDUINO $found_arduino->{device} on COM$found_arduino->{num}\n";
-			$arduino = 1;
-			$crlf = 1 if $found_arduino->{device} =~ /ESP32/i;
-			$COM_PORT = $found_arduino->{num};
-		}
-		elsif ($found_any)
-		{
-
-			print "found COM$found_any->{num} VID($found_any->{VID}) PID($found_any->{PID})\n";
-			$COM_PORT = $found_any->{num};
-		}
-		else
-		{
-			my $now = time();
-			while (!$ssdp_found && $now < $ssdp_started + $SSDP_TIMEOUT)
+			my $val = $1;
+			if ($val eq 'server_port')
 			{
-				my $secs = $SSDP_TIMEOUT - ($now - $ssdp_started);
-				print "Searching for remote devices($secs) ...\n";
-				sleep(2);
-				$now = time()
+				$SERVER_PORT = $args[$arg_num++];
+				quit("invalid SERVER_PORT $SERVER_PORT")
+					if $SERVER_PORT !~ /^\d+/;
 			}
-			if ($ssdp_found)
+			elsif ($val eq 'auto')
 			{
-				print "found REMOTE $ssdp_found->[1] at $ssdp_found->[0]\n";
-				$sock_ip = "$ssdp_found->[0]:$TELNET_PORT";
+				$auto = 1;
+			}
+			elsif ($val eq 'rpi')
+			{
+				$rpi = 1;
+			}
+			elsif ($val eq 'crlf')
+			{
 				$crlf = 1;
 			}
+			elsif ($val eq 'arduino')
+			{
+				$arduino = 1;
+			}
+			elsif ($val eq 'file_server')
+			{
+				$start_file_server = 1;
+			}
+			else
+			{
+				quit("Illegal command line argument: -$arg");
+			}
+
+		}
+		elsif ($arg =~ /^\d+$/)
+		{
+			if ($arg >= 100)
+			{
+				$BAUD_RATE = $arg;
+			}
+			else
+			{
+				$COM_PORT = $arg;
+			}
+		}
+		elsif ($arg =~ /^(\d+\.\d+\.\d+\.\d+)(:(\d+))*$/)
+		{
+			# Port 23 works with my ESP32 Telnet
+			# somewhere I have an implementation using port 80
+
+			($SOCK_IP,$SOCK_PORT) = ($1,$3);
+			$SOCK_PORT ||= $TELNET_PORT;
+			# default to echo/crlf
+			$crlf = 1;
 		}
 	}
-
-	Pub::SSDPScan::stop() if $started;
 }
-
 
 
 #---------------------------------------------------
 # methods
 #---------------------------------------------------
 
+
+sub quit
+{
+	my ($msg) = @_;
+	error($msg);
+	print "Hit any key to close window -->";
+	getc();
+	exit(0);
+}
+
+sub notifyError
+{
+	my ($msg) = @_;
+	error($msg);
+	pushNotification("ERROR\t$msg");
+}
+
+
 sub getFileTime
 {
     my ($filename) = @_;
 	my ($dev,$ino,$mode,$nlink,$uid,$gid,$rdev,$size,
 	  	$atime,$mtime,$ctime,$blksize,$blocks) = stat($filename);
-    # print "file_time=$mtime\n";
+
     return $mtime || 0;
 }
 
@@ -408,7 +363,7 @@ sub isEventCtrlC
         $event[0] == 1 &&      # key event
         $event[5] == 3)        # char = 0x03
     {
-        print "ctrl-C pressed ...\n";
+        display($dbg_box,-1,"ctrl-C pressed ...");
         return 1;
     }
     return 0;
@@ -419,7 +374,7 @@ sub getKernelFilename
 {
 	if (!open(IFILE,"<$registry_filename"))
 	{
-		printf("ERROR - could not open registry_file $registry_filename for reading!\n");
+		error("could not open registry_file $registry_filename for reading!");
 	}
 	else
 	{
@@ -427,7 +382,7 @@ sub getKernelFilename
 		$kernel_filename =~ s/\s+$//g;
 		$kernel_filename =~ s/\\/\//g;
 		close IFILE;
-		printf "got kernel filename=$kernel_filename\n";
+		display($dbg_box,-1,"got kernel filename=$kernel_filename");
 	}
 }
 
@@ -435,7 +390,7 @@ sub getKernelFilename
 sub showStatus
 {
 	my $title = "";
-	$title .= $sock_ip ? "$sock_ip:$sock_port" : "COM$COM_PORT ";
+	$title .= $SOCK_IP ? "$SOCK_IP:$SOCK_PORT" : "COM$COM_PORT ";
 	$title .= " CONNECTED" if $port || $sock;
 	$title .= " -crlf" if $crlf;
 	$title .= " -arduino" if $arduino;
@@ -448,10 +403,10 @@ sub showStatus
 
 sub connectSocket
 {
-	print "Connecting TCP/IP to $sock_ip:$sock_port\n";
+	display($dbg_box,-1,"Connecting TCP/IP to $SOCK_IP:$SOCK_PORT");
 	my @psock = (
-		PeerAddr => $sock_ip,
-		PeerPort => $sock_port, # "udp(80)",         #  "http(80)",
+		PeerAddr => $SOCK_IP,
+		PeerPort => $SOCK_PORT, # "udp(80)",         #  "http(80)",
 		Proto    => 'tcp',      # 'udp'
 		Timeout  => 5,          # timeout for connection
 		Blocking => 0,
@@ -460,14 +415,16 @@ sub connectSocket
 	$sock = IO::Socket::INET->new(@psock);
 	if (!$sock)
 	{
-		print("ERROR could not connect to TCP/IP server\n");
+		notifyError("could not connect to %sock_ip:$SOCK_PORT");
 	}
 	else
 	{
 		# setsockopt($sock, SOL_SOCKET, SO_KEEPALIVE, 1);
-		print "Connected to TCP/IP $sock_ip:$sock_port\n";
+		display($dbg_box,-1,"Connected to TCP/IP $SOCK_IP:$SOCK_PORT");
+		pushNotification("CONNECTED\tsock_ip:$SOCK_PORT");
 		binmode $sock;
 		$sock->blocking(0);
+
 	}
 	showStatus();
 }
@@ -475,15 +432,15 @@ sub connectSocket
 
 sub initComPort
 {
-    # print "initComPort($name,$com_port,$baud_rate)\n";
+    # print "initComPort($COM_PORT,$BAUD_RATE)\n";
 
-	return if $sock_ip;
+	return if $SOCK_IP;
 
     $port = Win32::SerialPort->new("COM$COM_PORT",1);
 
     if ($port)
     {
-        print "COM$COM_PORT opened\n";
+        display($dbg_box,-1,"COM$COM_PORT opened");
 
         # This code modifes Win32::SerialPort to allow higher baudrates
 
@@ -516,11 +473,12 @@ sub initComPort
 
         if (!$port->write_settings())
         {
-            print "Could not configure COM$COM_PORT\n";
+            notifyError("Could not configure COM$COM_PORT");
             $port = undef;
         }
         else
         {
+			pushNotification("CONNECTED\tCOM$COM_PORT");
             $port->binary(1);
             showStatus();
         }
@@ -546,7 +504,8 @@ sub systemCheck
             # we set it to undef below.  So far, no negative
             # side effects from this ...
 
-            print "COM$COM_PORT disconnected\n";
+            display($dbg_box,-1,"COM$COM_PORT disconnected");
+			pushNotification("DISCONNECT\tCOM$COM_PORT");
             $port = undef;
             showStatus();
         }
@@ -566,20 +525,20 @@ sub systemCheck
 		if ($check_time != $registry_filetime)
 		{
 			$registry_filetime = $check_time;
-			print "kernel registry file has changed\n";
+			warning($dbg_box,-1,"kernel registry file has changed");
 			if ($check_time)
 			{
 				my $save_kernel_filename = $kernel_filename;
 				getKernelFilename();
 				if ($kernel_filename ne $save_kernel_filename)
 				{
-					print "kernel_filename changed to $kernel_filename\n";
+					display($dbg_box,-1,"kernel_filename changed to $kernel_filename");
 					$kernel_filetime = 0;	# will always upload it if auto_upload
 				}
 			}
 			else
 			{
-				print "WARNING: $registry_filename disappeared!\n";
+				warning($dbg_box,-1,"$registry_filename disappeared!");
 			}
 		}
 
@@ -589,22 +548,22 @@ sub systemCheck
 			$kernel_filetime = $check_time;
 			if ($check_time)
 			{
-				print "$kernel_filename changed\n";
+				display($dbg_box,-1,"$kernel_filename changed");
 				$kernel_file_changed = 1;
 				if ($port)
 				{
-					print "AUTO-REBOOTING rpi (sending ctrl-B)\n";
+					warning($dbg_box,-1,"AUTO-REBOOTING rpi (sending ctrl-B)");
 					$port->write("\x02");
 					$kernel_filetime = $check_time;
 				}
 				else
 				{
-					print "WARNING: cannot reboot rpi - COM$COM_PORT is not open!\n";
+					warning($dbg_box,-1,"cannot reboot rpi - COM$COM_PORT is not open!");
 				}
 			}
 			else
 			{
-				print "WARNING: kernel $kernel_filename not found!\n";
+				warning($dbg_box,-1,"kernel $kernel_filename not found!");
 			}
 		}
 	}
@@ -625,14 +584,14 @@ sub listen_for_arduino_thread
 			my $pl = Win32::Process::List->new();
 			my %processes = $pl->GetProcesses();
 
-			# print "PROCESS::LIST\n";
+			display($dbg_box+1,0,"PROCESS_LIST");
 			foreach my $pid (sort {$processes{$a} cmp $processes{$b}} keys %processes )
 			{
 				my $name = $processes{$pid};
-				# print "$name\n" if $name;
+				display($dbg_box+2,0,"$name") if $name;
 				if ($name eq $ARDUINO_PROCESS_NAME)
 				{
-					# print "Found process arduino-builder.exe\n";
+					display($dbg_box+2,0,"Found process $ARDUINO_PROCESS_NAME");
 					$found = 1;
 					last;
 				}
@@ -642,19 +601,59 @@ sub listen_for_arduino_thread
         if ($found && !$in_arduino_build)
         {
             $in_arduino_build = 1;
-            print "in_arduino_build=$in_arduino_build\n";
+            display($dbg_box,-1,"in_arduino_build=$in_arduino_build");
+			pushNotification("ARDUINO_BUILD\tSTARTED");
         }
         elsif ($in_arduino_build && !$found)
         {
-			print "in_arduino_build=0 ... sleeping for 2 seconds\n";
+			display($dbg_box,-1,"in_arduino_build=0 ... sleeping for 2 seconds");
+			pushNotification("ARDUINO_BUILD\tENDED");
             sleep(2);
             $in_arduino_build = 0;
-            # print "resuming after sleep\n";
+            display($dbg_box+1,-1,"resuming after sleep");
         }
 
         sleep(1);
     }
 }
+
+
+sub startBuddyApp
+{
+	# print "PACKAGED=".Cava::Packager::IsPackaged()."\n";	# 0 or 1
+	# print "BIN_PATH=".Cava::Packager::GetBinPath()."\n";	# executable directory
+	# print "EXE_PATH=".Cava::Packager::GetExePath()."\n";	# full executable pathname
+	# print "EXE=".Cava::Packager::GetExecutable()."\n";		# leaf executable filename
+
+	while (!$INITIAL_PORT)
+	{
+		sleep(1);
+	}
+
+	display($dbg_process,-1,"STARTING buddyApp INITIAL_PORT=$INITIAL_PORT");
+	my $command = Cava::Packager::IsPackaged() ?
+		Cava::Packager::GetBinPath()."/Buddy.exe $INITIAL_PORT" :
+		"perl /base/Pub/Buddy/BuddyApp.pm $INITIAL_PORT";
+
+	$buddy_app_pid = system 1, $command;
+	display($dbg_process,0,"BuddyApp pid="._def($buddy_app_pid));
+}
+
+
+sub onSSDPDevice
+{
+    my ($rec) = @_;
+	if (!$ssdp_found->{$rec->{ip}})
+	{
+		my $iot_device = $rec->{SERVER} =~ /myIOTDevice UPNP\/1.1 (.*)\// ? $1 :
+			$rec->{SERVER} ? $rec->{SERVER} :
+			$rec->{ST} ? $rec->{ST} :
+			"unknown device";
+		$ssdp_found->{$rec->{ip}} = $iot_device;
+		pushNotification("SSDP\t$rec->{ip}\t$iot_device");
+	}
+}
+
 
 
 
@@ -663,7 +662,34 @@ sub listen_for_arduino_thread
 # MAIN
 #==================================================================
 
-print "Initializing ...\n";
+
+processCommandLine(@ARGV);
+
+display($dbg_box,-1,"SERVER_PORT $SERVER_PORT") if $SERVER_PORT;
+display($dbg_box,-1,"COM$COM_PORT") if $COM_PORT;
+display($dbg_box,-1,"SOCK_IP: $SOCK_IP::$SOCK_PORT") if $SOCK_IP;
+display($dbg_box,-1,"-rpi") if ($rpi);
+display($dbg_box,-1,"-crlf") if ($crlf);
+display($dbg_box,-1,"-arduino") if $arduino;
+display($dbg_box,-1,"-file_server") if $start_file_server;
+
+
+
+$con->Title("initializing ...");
+display($dbg_box,-1,"Initializing ...");
+
+if (1)
+{
+	$server = Pub::Buddy::buddyServer->new({ PORT => $SERVER_PORT });
+	quit("could not start SERVER on port($SERVER_PORT)") if !$server;
+}
+
+if (!$SERVER_PORT)
+{
+	startBuddyApp();
+	$ssdp_started = Pub::SSDPScan::start($SEARCH_MYIOT,\&onSSDPDevice,28);
+	quit("could not start SSDP_SERVER") if !$ssdp_started;
+}
 
 
 if ($arduino)
@@ -677,25 +703,25 @@ if ($rpi)
 {
 	if (!$registry_filetime)
 	{
-		printf("ERROR - could not open registry_file $registry_filename!\n");
+		error("could not open registry_file $registry_filename!");
 	}
 	else
 	{
 		getKernelFilename();
 		if (!$kernel_filename)
 		{
-			printf("WARNING - no kernel filename found in $registry_filename!\n");
+			warning($dbg_box,-1,"no kernel filename found in $registry_filename!");
 		}
 		else
 		{
 			$kernel_filetime = getFileTime($kernel_filename);
 			if (!$kernel_filetime)
 			{
-				printf("WARNING - kernel $kernel_filename not found!\n");
+				warning($dbg_box,-1,"kernel $kernel_filename not found!");
 			}
 			else
 			{
-				print "kernel=$kernel_filename\n";
+				display($dbg_box,-1,"kernel=$kernel_filename");
 			}
 		}
 	}
@@ -712,7 +738,6 @@ my $in_line = '';
 my $tmp_file_reply = '';
 my $is_esc_line = 0;
 
-
 sub readProcessPort
 {
 	my $buf;
@@ -721,7 +746,7 @@ sub readProcessPort
 	if ($port)
 	{
 		my ($BlockingFlags, $InBytes, $OutBytes, $LatchErrorFlags) = $port->status();
-			# print ">$BlockingFlags, $InBytes, $OutBytes, $LatchErrorFlags\n";
+			# display($dbg_box,-1,">$BlockingFlags, $InBytes, $OutBytes, $LatchErrorFlags");
 			# we differentiate fileSystem replies from regular output
 			# teensyEpression output by assuming that regular output always
 			# starts with an ESC color sequence.
@@ -735,8 +760,9 @@ sub readProcessPort
 
 		if ($! && $! !~ /A non-blocking socket operation could not be completed immediately/)
 		{
-			# print "ERROR: $!\n";
-			printf("SOCKET CONNECTION LOST\n");
+			display($dbg_box+1,-1,"ERROR: $!");
+			display($dbg_box,-1,"SOCKET CONNECTION LOST");
+			pushNotication("DISCONNECT\t$SOCK_IP:$SOCK_PORT");
 			$sock->close();
 			$sock = undef;
 			showStatus();
@@ -775,7 +801,6 @@ sub readProcessPort
 			{
 				my ($fg,$bg) = ($1,$2);
 				$bg -= 10;
-
 				# print "setting color($fg,$bg)\n";
 				$con->Attr(colorAttr($bg)<<4 | colorAttr($fg));
 				$esc_cmd = '';
@@ -830,7 +855,7 @@ sub readProcessPort
 					($grab_width, $grab_height) = ($1,$2);
 					$in_screen_grab = $grab_width * $grab_height * 3;
 
-					print("doing SCREEN_GRAB($grab_width X $grab_height) $in_screen_grab bytes\n");
+					warning($dbg_box,-1,"doing SCREEN_GRAB($grab_width X $grab_height) $in_screen_grab bytes");
 
 					$screen_grab = '';
 					$in_line = '';
@@ -880,11 +905,11 @@ sub readProcessPort
 				if (-f $kernel_filename)
 				{
 					$kernel_file_changed = 0;
-					buddy_Binary::uploadBinary($port,$kernel_filename);
+					Pub::Buddy::boxBinary::uploadBinary($port,$kernel_filename);
 				}
 				else
 				{
-					print "WARNING - $kernel_filename not found. Not uploading!\n";
+					warning($dbg_box,-1,"WARNING - $kernel_filename not found. Not uploading!");
 				}
 			}
 		}
@@ -901,9 +926,15 @@ my $CTRL_A_TIMEOUT = 4;
 my $last_ctrl_a = 0;
 my $system_check_time = 0;
 
+display($dbg_box,0,"STARTING LOOP");
+
+
+my $loop_num = 0;
 
 while (1)
 {
+	# print $loop_num++."\n";
+
 	# transmit pending $file_server_request
 
 	if ($port && $file_server_request)
@@ -951,18 +982,24 @@ while (1)
     #---------------------------------------
     # highest priority is ctrl-C
 
+
     if ($in->GetEvents())
     {
         my @event = $in->Input();
         # print "got event '@event'\n" if @event;
         if (@event && isEventCtrlC(@event))			# CTRL-C
         {
-            print "exiting buddy!\n";
+            warning($dbg_box,-1,"exiting buddy!");
+			pushNotification("EXIT");
+			sleep(1);
+
             if ($port)
             {
                 $port->close();
                 $port = undef;
             }
+			$server->stop() if $server;
+			Pub::SSDPScan::stop() if $ssdp_started;
 			# $sock is closed automatically as needed
             exit(0);
         }
@@ -976,23 +1013,9 @@ while (1)
 			{
 				$con->Cls();    # manually clear the screen
 			}
-			elsif ($con && $file_server && ord($char) == 5)         # CTRL-E
+			elsif ($con && !$SERVER_PORT && $INITIAL_PORT && ord($char) == 5)         # CTRL-E
 			{
-				# pop up the fileClient
-
-				my $port = $DEFAULT_PORT + $COM_PORT;
-
-				# print "PACKAGED=".Cava::Packager::IsPackaged()."\n";	# 0 or 1
-				# print "BIN_PATH=".Cava::Packager::GetBinPath()."\n";	# executable directory
-				# print "EXE_PATH=".Cava::Packager::GetExePath()."\n";	# full executable pathname
-				# print "EXE=".Cava::Packager::GetExecutable()."\n";		# leaf executable filename
-
-				my $command = Cava::Packager::IsPackaged() ?
-					Cava::Packager::GetBinPath()."/fileClient.exe $port" :
-					"perl /base/Pub/FS/fileClient.pm $port";
-
-				my $pid = system 1, $command;
-				display($dbg_fileserver,0,"fileClient pid="._def($pid));
+				startBuddyApp();
 			}
 
 
@@ -1046,7 +1069,7 @@ while (1)
 
     if ($in_arduino_build && $port)
     {
-        print("COM$COM_PORT closed for Arduino Build\n");
+        display($dbg_box,-1,"COM$COM_PORT closed for Arduino Build");
         $port->close();
         $port = undef;
         showStatus();
@@ -1059,11 +1082,11 @@ while (1)
     # check immediately for opened port
     # but only every so often for closed / kernel changes ...
 
-	if ($sock_ip)
+	if ($SOCK_IP)
 	{
 		connectSocket() if (!$sock)
 	}
-    elsif (!$port && !$in_arduino_build)
+    elsif ($COM_PORT && !$port && !$in_arduino_build)
     {
 	    # print("opening COM$COM_PORT after Arduino Build\n");
         $port = initComPort();
@@ -1082,7 +1105,7 @@ while (1)
 
 	# finished - miscellaneous
 
-	sleep(0.01);		# keep machine from overheating
+	sleep(0.5);	  # 01);		# keep machine from overheating
 
 }   # while (1) main loop
 

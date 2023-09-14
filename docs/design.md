@@ -2,6 +2,10 @@ The windows app is really the main process manager,
 
 but is started by the initial invocation of buddy,
 
+and remains sacrosanct.
+
+
+
 which really should be a single instance application.
 
 

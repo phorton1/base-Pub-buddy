@@ -4,7 +4,7 @@
 #-------------------------------------------
 # The workhorse window of the application
 
-package Pub::FS::fileClientPane;
+package Pub::Buddy::winFilePane;
 use strict;
 use warnings;
 use Wx qw(:everything);

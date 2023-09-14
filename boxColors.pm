@@ -1,4 +1,4 @@
-package buddy_Colors;
+package Pub::Buddy::boxColors;
 use strict;
 use warnings;
 

@@ -1,15 +1,14 @@
 #!/usr/bin/perl
 #-------------------------------------------------------------
-# fileClientResources.pm
+# appResources.pm
 #-------------------------------------------------------------
 # All appBase applications may provide resources that contain the
 # app_title, main_menu, command_data, notebook_data, and so on.
 # Derived classes should merge their values into the base
 # class $resources member.
 
-use lib '/base/apps/file2';
 
-package Pub::FS::fileClientResources;
+package Pub::Buddy::appResources;
 use strict;
 use warnings;
 use Pub::WX::Resources;
