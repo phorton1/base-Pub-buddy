@@ -90,7 +90,6 @@
 #   ctrl-L = used to update the rpi SD memory card
 #       in the laptop memory card slot (nothing to do with buddy)
 
-use lib '.','/base/apps/buddy';
 
 use strict;
 use warnings;
@@ -110,9 +109,9 @@ use Pub::ComPorts;
 use Pub::SSDPScan;
 use Pub::FS::RemoteServer;
 use Pub::FS::SessionRemote;
-use buddy_Colors;
-use buddy_Binary;
-use buddy_Grab;
+use Pub::buddy::buddy_Colors;
+use Pub::buddy::buddy_Binary;
+use Pub::buddy::buddy_Grab;
 
 
 my $dbg_fileserver = 0;
