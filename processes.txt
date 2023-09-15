@@ -1,0 +1,57 @@
+Displayed PIDs
+	14996	initial buddyBox from itself
+	15116	buddyApp started from buddyBox
+	13500	buddyApp from itself
+	8688	2nd buddyBox from buddyApp			bogus or intermediate
+	11184	2nd buddyBox from itself
+
+Shown in Task Manager
+	Perl Command Line Interpreter
+		Buddy 10.237.50.12 CONNEC	11184		perl BuddyBox 10.237.50.12 ...			2nd buddyBox
+		Console Window Host			9168
+	Perl Command Line Interpreter	13500		perl BuddyApp 53571 14996				buddyApp from itself
+		BuddyApp
+	Windows Command Processor
+		Command Prompt				3004
+		Console Window Host			15304
+		Perl Command Line Interp	14996		perl BuddyBox							initial buddyBox
+		Windows Command Processor	15116		cmd.exe /x/d/c "perl BuddyApp.o			buddyApp from initial Buddy Box
+
+
+buddyBox_8688_14996.buddy_pid
+	# does not give a killable PID for the second buddyBox
+
+
+SUB_PROCESSES starting with this buddyBox(14996)
+	14996 							initial buddyBox
+	  pid(13500)					buddyApp from itself
+	  pid(14996)					initial buddyBox
+		  15116						buddyApp started from buddyBox
+			pid(13500)              buddyApp from itself
+			pid(15116)				buddyApp started from buddyBox
+				13500				buddyApp from itself
+				  pid(13500)		buddyApp from itself
+	  pid(15116)					buddyApp started from buddyBox
+		  13500						buddyApp from itself
+			pid(13500)				buddyApp from itself
+
+ONE
+	14996 							initial buddyBox
+		  15116						buddyApp started from buddyBox
+				13500				buddyApp from itself
+		  13500						buddyApp from itself
+
+OR THE OTHER
+	  pid(13500)					buddyApp from itself
+	  pid(14996)					initial buddyBox
+			pid(13500)              buddyApp from itself
+			pid(15116)				buddyApp started from buddyBox
+				  pid(13500)		buddyApp from itself
+	  pid(15116)					buddyApp started from buddyBox
+			pid(13500)				buddyApp from itself
+
+
+- ONE contains the best simple tree
+- No extra information gleaned from OR THE OTHER
+- The tree does not show the 2nd Buddy Box which is presumably detached
+- the pid file I wrote does not give the pid needed to kill the 2nd buddyBox

@@ -131,7 +131,7 @@ my @win_context_menu = (
 #-----------------------------------------
 
 $resources = { %$resources,
-    app_title       => 'fileCllient',
+    app_title       => 'BuddyApp',
 
     command_data    => \%command_data,
     notebooks       => \@notebooks,

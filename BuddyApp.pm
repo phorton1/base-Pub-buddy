@@ -14,18 +14,24 @@ use Pub::Buddy::appResources;
 use Pub::Buddy::winTab;
 use base qw(Pub::WX::Frame);
 
-
 my $dbg_app = 0;
 
-$data_dir = '/base/temp';	# should be unused
+
+$data_dir = '/base/temp';	# currently unused
 $temp_dir = '/base/temp';
-$logfile = "$temp_dir/Buddy.log";
+
+# $logfile = "$temp_dir/Buddy.log";
+
 $Pub::WX::AppConfig::ini_file = "$temp_dir/Buddy.ini";
-
-
 unlink $Pub::WX::AppConfig::ini_file;
-	# huh?
 
+my $INITIAL_PORT = $ARGV[0];
+my $PARENT_PID = $ARGV[1];
+
+
+#-----------------------------------------------------
+# methods
+#-----------------------------------------------------
 
 sub new
 {
@@ -42,9 +48,9 @@ sub onInit
     $this->SUPER::onInit();
 	EVT_MENU($this, $COMMAND_CONNECT, \&commandConnect);
 	return if !$this->createPane($ID_CLIENT_WINDOW,undef,{
-			remote_port => $ARGV[0],
+			remote_port => $INITIAL_PORT,
 			session_name => "TE(1)",
-			device_addr => 6,
+			device_addr => 3,
 			device_name => 'teensyExpression',
 			arduino => 1,
 			file_server => 1,
@@ -74,6 +80,18 @@ sub createPane
 }
 
 
+sub commandConnect
+{
+	my ($this,$event) = @_;
+	return if !$this->createPane($ID_CLIENT_WINDOW,undef,{
+			remote_port => 0,
+			session_name => "CLOCK(1)",
+			device_addr => '10.237.50.12',
+			device_name => 'theClock3.3',
+			crlf => 1,
+		});
+
+}
 
 
 #----------------------------------------------------
@@ -96,7 +114,7 @@ sub OnInit
 	$frame = Pub::Buddy::BuddyApp->new();
 	unless ($frame) {print "unable to create BuddyApp"; return undef}
 	$frame->Show( 1 );
-	display(0,0,"BuddyApp.pm started");
+	display(0,0,"BuddyApp.pm started PARENT_PID=$PARENT_PID this_pid=$$");
 	return 1;
 }
 

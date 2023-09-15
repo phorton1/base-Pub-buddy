@@ -38,6 +38,11 @@
 #---------------------------------------------------------------------------
 # Command Line
 #---------------------------------------------------------------------------
+#   -parent initial_buddy_box_pid   buddyApp_tab_name_for_that_connection
+#
+#        used to write a pid file which we can check in the initial buddyBox
+#        to see if the user has summarily closed a child buddyBox, so that
+#        we can notify the buddyApp to close that window.
 #
 #	-server_port NNNNN
 #
@@ -131,7 +136,7 @@
 #   ctrl-L = used to update the rpi SD memory card
 #       in the laptop memory card slot (nothing to do with buddy)
 
-
+package Pub::Buddy::BuddyBox;
 use strict;
 use warnings;
 use threads;
@@ -141,7 +146,7 @@ use Socket;
 use Time::HiRes qw( sleep usleep  );
 use Win32::Console;
 use Win32::Process::List;
-use Win32::Process::Info qw{NT};
+use Win32::Process::Info qw{NT WMI};
 use Win32::SerialPort qw(:STAT);
 use IO::Socket::INET;
 use Net::Telnet;
@@ -172,7 +177,6 @@ $| = 1;     # IMPORTANT - TURN PERL BUFFERING OFF MAGIC
 my $TELNET_PORT = 23;
 	# Default TCP/IP port is TELNET.
 	# Somewhere I have a server on port 80
-
 my $DEFAULT_BAUD_RATE = 115200;
 my $SYSTEM_CHECK_TIME = 3;
     # check for changed COM/SOCKET connections and, for rpi,
@@ -180,6 +184,8 @@ my $SYSTEM_CHECK_TIME = 3;
 
 my $ARDUINO_PROCESS_NAME = "arduino-builder.exe";
 my $KERNEL_UPLOAD_RE = 'Press <space> within \d+ seconds to upload file';
+
+my $BUDDY_PID_EXT = "BUDDY_pid";
 
 
 # Filename constants
@@ -196,19 +202,17 @@ my $registry_filetime = getFileTime($registry_filename);
 # command line params
 #-----------------------
 
-my $SERVER_PORT = 0;
-my $COM_PORT = 0;
-my $SOCK_IP = '';
-my $SOCK_PORT = 0;
-my $BAUD_RATE = $DEFAULT_BAUD_RATE;
-
-my $auto = 0;
-my $crlf = 0;
-my $rpi = 0;
-my $arduino = 0;
-
-my $start_file_server = 0;
-
+my $SERVER_PORT:shared = 0;
+my $COM_PORT:shared = 0;
+my $SOCK_IP:shared = '';
+my $SOCK_PORT:shared = 0;
+my $BAUD_RATE:shared = $DEFAULT_BAUD_RATE;
+my $crlf:shared = 0;
+my $rpi:shared = 0;
+my $arduino:shared = 0;
+my $start_file_server:shared = 0;
+my $parent_pid:shared = 0;
+my $parent_tab_name:shared = 0;
 
 
 #-----------------------
@@ -221,19 +225,54 @@ $in->Mode(ENABLE_MOUSE_INPUT | ENABLE_WINDOW_INPUT );
 $con->Attr($COLOR_CONSOLE);
 
 my $port;
-my $sock;
-my $in_arduino_build:shared = 0;
-my $kernel_filename = '';
-my $kernel_filetime = 0;
-my $kernel_file_changed = 0;
+my $sock;;
 my $server;
 my $ssdp_started;
 my $ssdp_found = {};
 my $buddy_app_pid;
 
-our $file_server_request:shared = '';
-our $file_server_reply:shared = '';
-our $file_reply_pending:shared = 0;
+my $kernel_check_time = 0;
+my $kernel_filename = '';
+my $kernel_filetime = 0;
+my $kernel_file_changed = 0;
+
+my $process_thread_running:shared;
+my $in_arduino_build:shared = 0;
+
+
+#--------------------------------------------
+# signal handler
+#--------------------------------------------
+
+
+sub exitBuddy
+{
+	warning($dbg_box,-1,"exiting buddy!");
+	pushNotification("EXIT");
+	sleep(1);
+	if ($port)
+	{
+		$port->close();
+		$port = undef;
+	}
+	$server->stop() if $server;
+	Pub::SSDPScan::stop() if $ssdp_started;
+	# $sock is closed automatically as needed
+	exit(0);
+}
+
+
+sub onSignal
+{
+    my ($sig) = @_;
+    LOG(-1,"BuddyBox terminating on SIG$sig");
+	exitBuddy();
+    # kill 6,$$;	# never gets here
+}
+
+use sigtrap 'handler', \&onSignal, qw(normal-signals);
+    # $SIG{INT} = \&onSignal; only catches ^c
+
 
 
 #--------------------------------------------
@@ -243,22 +282,26 @@ our $file_reply_pending:shared = 0;
 sub processCommandLine
 {
 	my (@args) = @_;
+	display($dbg_box,-1,"processCommandLine(".scalar(@args).")");
+
 	my $arg_num = 0;
 	while ($arg_num < @args)
 	{
 		my $arg = $args[$arg_num++];
+
 		if ($arg =~ /^-(.*)/)
 		{
 			my $val = $1;
-			if ($val eq 'server_port')
+			if ($val eq 'parent')
+			{
+				$parent_pid = $args[$arg_num++];
+				$parent_tab_name = $args[$arg_num++];
+			}
+			elsif ($val eq 'server_port')
 			{
 				$SERVER_PORT = $args[$arg_num++];
 				quit("invalid SERVER_PORT $SERVER_PORT")
 					if $SERVER_PORT !~ /^\d+/;
-			}
-			elsif ($val eq 'auto')
-			{
-				$auto = 1;
 			}
 			elsif ($val eq 'rpi')
 			{
@@ -300,16 +343,30 @@ sub processCommandLine
 
 			($SOCK_IP,$SOCK_PORT) = ($1,$3);
 			$SOCK_PORT ||= $TELNET_PORT;
+
 			# default to echo/crlf
+
 			$crlf = 1;
 		}
 	}
+
+	display($dbg_box,-1,"    SERVER_PORT $SERVER_PORT") if $SERVER_PORT;
+	display($dbg_box,-1,"    parent_pid $parent_pid") if $parent_pid;
+	display($dbg_box,-1,"    parent_tab_name $parent_tab_name") if $parent_tab_name;
+	display($dbg_box,-1,"    COM_PORT = $COM_PORT") if $COM_PORT;
+	display($dbg_box,-1,"    SOCK_IP = $SOCK_IP:$SOCK_PORT") if $SOCK_IP;
+	display($dbg_box,-1,"    -rpi") if ($rpi);
+	display($dbg_box,-1,"    -crlf") if ($crlf);
+	display($dbg_box,-1,"    -arduino") if $arduino;
+	display($dbg_box,-1,"    -file_server") if $start_file_server;
 }
 
 
 #---------------------------------------------------
 # methods
 #---------------------------------------------------
+
+
 
 
 sub quit
@@ -369,26 +426,10 @@ sub isEventCtrlC
 }
 
 
-sub getKernelFilename
-{
-	if (!open(IFILE,"<$registry_filename"))
-	{
-		error("could not open registry_file $registry_filename for reading!");
-	}
-	else
-	{
-		$kernel_filename = <IFILE>;
-		$kernel_filename =~ s/\s+$//g;
-		$kernel_filename =~ s/\\/\//g;
-		close IFILE;
-		display($dbg_box,-1,"got kernel filename=$kernel_filename");
-	}
-}
-
 
 sub showStatus
 {
-	my $title = "";
+	my $title = "Buddy ";
 	$title .= $SOCK_IP ? "$SOCK_IP:$SOCK_PORT" : "COM$COM_PORT ";
 	$title .= " CONNECTED" if $port || $sock;
 	$title .= " -crlf" if $crlf;
@@ -432,9 +473,6 @@ sub connectSocket
 sub initComPort
 {
     # print "initComPort($COM_PORT,$BAUD_RATE)\n";
-
-	return if $SOCK_IP;
-
     $port = Win32::SerialPort->new("COM$COM_PORT",1);
 
     if ($port)
@@ -487,7 +525,148 @@ sub initComPort
 
 
 
+#===================================================
+# process_monitor
+#===================================================
+
+sub getChildPidFilenames
+{
+	my $retval = [];
+
+	if (opendir DIR,$temp_dir)
+	{
+		my @entries = readdir(DIR);
+		closedir DIR;
+		for my $entry (@entries)
+		{
+			if ($entry =~ /^(\d+)\.(\d+)\.$BUDDY_PID_EXT/)
+			{
+				push @$retval,$entry;
+			}
+		}
+	}
+	return $retval;
+}
+
+
+sub killDeadAppPanes()
+{
+	my $pi = Win32::Process::Info->new(undef,'WMI');
+	display($dbg_box+1,1,"CHILD PID FILES");
+	my $pid_files = getChildPidFilenames();
+	for my $fn (@$pid_files)
+	{
+		display($dbg_box+1,2,"file=$fn");
+		if ($fn =~ /^(\d+).(\d+)\./)
+		{
+			my $cpid = $1;
+			my $ppid = $2;
+			if ($ppid == $$)
+			{
+				my $info = getProcInfo($pi,$cpid);
+				my $delete_it = 0;
+
+				if ($info)
+				{
+					display($dbg_box+1,3,"name   =$info->{name}") ;
+					display($dbg_box+1,3,,"command=$info->{command}");
+					if ($info->{command} !~ /BuddyBox/)
+					{
+						warning($dbg_box,3,"cpid($cpid) no longer belongs to Buddy!");
+						$delete_it = 1;
+					}
+				}
+				else
+				{
+					warning($dbg_box+1,3,"cpid($cpid) not found");
+					$delete_it = 1;
+				}
+
+				if ($delete_it)
+				{
+					warning($dbg_box,4,"deleting cpid($cpid) and notifying buddyApp");
+					my $text = getTextFile("$temp_dir/$fn");
+					if (!$text)
+					{
+						error("NO TEXT in $fn");
+					}
+					else
+					{
+						$text =~ s/\s$//g;
+						display($dbg_box+1,4,"Closing pane $text");
+						pushNotification("KILL\t$text");
+					}
+					unlink "$temp_dir/$fn";
+				}
+			}
+			else
+			{
+				warning($dbg_box,3,"$cpid is not a child of $$");
+			}
+		}
+	}
+}
+
+
+
+sub process_monitor
+	# watch for a process indicating an Arduino build is happening
+	# and set $in_arduino_build if it is
+{
+    while ($process_thread_running)
+    {
+		# every 1 second
+		# Arduino stuff
+
+		if ($arduino)
+		{
+			my $found = -f $upload_spiffs_sempaphore_file;
+			if (!$found)
+			{
+				my $pl = Win32::Process::List->new();
+				my %processes = $pl->GetProcesses();
+
+				display($dbg_box+1,0,"PROCESS_LIST");
+				foreach my $pid (sort {$processes{$a} cmp $processes{$b}} keys %processes )
+				{
+					my $name = $processes{$pid};
+					display($dbg_box+2,0,"pid($pid) = $name") if $name;
+					if ($name eq $ARDUINO_PROCESS_NAME)
+					{
+						display($dbg_box+2,0,"Found process $ARDUINO_PROCESS_NAME");
+						$found = 1;
+						last;
+					}
+				}
+			}
+
+			if ($found && !$in_arduino_build)
+			{
+				$in_arduino_build = 1;
+				display($dbg_box,-1,"in_arduino_build=$in_arduino_build");
+				pushNotification("ARDUINO_BUILD\tSTARTED");
+			}
+			elsif ($in_arduino_build && !$found)
+			{
+				display($dbg_box,-1,"in_arduino_build=0 ... sleeping for 2 seconds");
+				pushNotification("ARDUINO_BUILD\tENDED");
+				sleep(2);
+				$in_arduino_build = 0;
+				display($dbg_box+1,-1,"resuming after sleep");
+			}
+		}
+
+		killDeadAppPanes();
+
+        sleep(1);
+    }
+}
+
+
+
+
 sub systemCheck
+	# every $SYSTEM_CHECK_TIME (3) seconds
 {
     # print "system check ...\n";
     # check for dropped ports
@@ -515,106 +694,80 @@ sub systemCheck
 			# send a null character for keep alive
 	}
 
-    # check if the kernel registry file has changed and update
-	# the kernel filename if it has ...
 
-    if ($rpi)
-    {
-        my $check_time = getFileTime($registry_filename);
-		if ($check_time != $registry_filetime)
-		{
-			$registry_filetime = $check_time;
-			warning($dbg_box,-1,"kernel registry file has changed");
-			if ($check_time)
-			{
-				my $save_kernel_filename = $kernel_filename;
-				getKernelFilename();
-				if ($kernel_filename ne $save_kernel_filename)
-				{
-					display($dbg_box,-1,"kernel_filename changed to $kernel_filename");
-					$kernel_filetime = 0;	# will always upload it if auto_upload
-				}
-			}
-			else
-			{
-				warning($dbg_box,-1,"$registry_filename disappeared!");
-			}
-		}
+	# start the process thread invariantly in the
+	# initial buddyBox, or if -arduino in subsequent ones,
+	# and stop it in subsequent ones if -arduino went away
 
-		$check_time = getFileTime($kernel_filename);
-		if ($check_time != $kernel_filetime)
-		{
-			$kernel_filetime = $check_time;
-			if ($check_time)
-			{
-				display($dbg_box,-1,"$kernel_filename changed");
-				$kernel_file_changed = 1;
-				if ($port)
-				{
-					warning($dbg_box,-1,"AUTO-REBOOTING rpi (sending ctrl-B)");
-					$port->write("\x02");
-					$kernel_filetime = $check_time;
-				}
-				else
-				{
-					warning($dbg_box,-1,"cannot reboot rpi - COM$COM_PORT is not open!");
-				}
-			}
-			else
-			{
-				warning($dbg_box,-1,"kernel $kernel_filename not found!");
-			}
-		}
+	if (!$process_thread_running && (
+		!$SERVER_PORT || $arduino))
+	{
+		display($dbg_box,-1,"starting process_monitor");
+		my $process_thread = threads->create(\&process_monitor);
+		$process_thread->detach();
+		$process_thread_running = 1;
 	}
+	elsif ($process_thread_running &&
+		   $SERVER_PORT && !$arduino)
+	{
+		$process_thread_running = 0;
+	}
+
+
+    # check for changes to the kernel_filename or kernel_filetime
+
+	if ($rpi)
+	{
+		if (!open(IFILE,"<$registry_filename"))
+		{
+			error("could not open registry_file $registry_filename for reading!");
+			$rpi = 0;
+		}
+		else
+		{
+			my $filename = <IFILE>;
+			$filename =~ s/\s+$//g;
+			$filename =~ s/\\/\//g;
+			close IFILE;
+
+			if ($kernel_filename ne $filename)
+			{
+				$kernel_filename = $filename;
+				display($dbg_box,0,"kernel_filename changed to $kernel_filename");
+				$kernel_filetime = getFileTime($kernel_filename);
+				warning($dbg_box,0,"could not getFileTime($kernel_filename)");
+			}
+		}
+
+		if ($kernel_filename)
+		{
+			my $filetime = getFileTime($kernel_filename);
+			if ($kernel_filetime ne $filetime)
+			{
+				$kernel_filetime = $filetime;
+				display($dbg_box,0,"$kernel_filename file_time changed");
+
+				if ($kernel_filetime)
+				{
+					if ($port)
+					{
+						$kernel_file_changed = 1;
+						warning($dbg_box,-1,"AUTO-REBOOTING rpi (sending ctrl-B)");
+						$port->write("\x02");
+					}
+					else
+					{
+						warning($dbg_box,-1,"cannot reboot rpi - COM$COM_PORT is not open!");
+					}
+
+				}	# filetime exists
+			}	# filetime changed
+		}	# kernel_filename
+	}	# rpi
+
 
 }   # systemCheck()
 
-
-
-sub listen_for_arduino_thread
-	# watch for a process indicating an Arduino build is happening
-	# and set $in_arduino_build if it is
-{
-    while (1)
-    {
-		my $found = -f $upload_spiffs_sempaphore_file;
-		if (!$found)
-		{
-			my $pl = Win32::Process::List->new();
-			my %processes = $pl->GetProcesses();
-
-			display($dbg_box+1,0,"PROCESS_LIST");
-			foreach my $pid (sort {$processes{$a} cmp $processes{$b}} keys %processes )
-			{
-				my $name = $processes{$pid};
-				display($dbg_box+2,0,"$name") if $name;
-				if ($name eq $ARDUINO_PROCESS_NAME)
-				{
-					display($dbg_box+2,0,"Found process $ARDUINO_PROCESS_NAME");
-					$found = 1;
-					last;
-				}
-			}
-		}
-
-        if ($found && !$in_arduino_build)
-        {
-            $in_arduino_build = 1;
-            display($dbg_box,-1,"in_arduino_build=$in_arduino_build");
-			pushNotification("ARDUINO_BUILD\tSTARTED");
-        }
-        elsif ($in_arduino_build && !$found)
-        {
-			display($dbg_box,-1,"in_arduino_build=0 ... sleeping for 2 seconds");
-			pushNotification("ARDUINO_BUILD\tENDED");
-            sleep(2);
-            $in_arduino_build = 0;
-            display($dbg_box+1,-1,"resuming after sleep");
-        }
-
-        sleep(1);
-    }
-}
 
 
 sub startBuddyApp
@@ -634,8 +787,8 @@ sub startBuddyApp
 
 	display($dbg_process,-1,"STARTING buddyApp INITIAL_PORT=$ACTUAL_SERVER_PORT");
 	my $command = Cava::Packager::IsPackaged() ?
-		Cava::Packager::GetBinPath()."/Buddy.exe $ACTUAL_SERVER_PORT" :
-		"perl /base/Pub/Buddy/BuddyApp.pm $ACTUAL_SERVER_PORT";
+		Cava::Packager::GetBinPath()."/BuddyApp.exe $ACTUAL_SERVER_PORT $$" :
+		"perl /base/Pub/Buddy/BuddyApp.pm $ACTUAL_SERVER_PORT $$";
 
 	$buddy_app_pid = system 1, $command;
 	display($dbg_process,0,"BuddyApp pid="._def($buddy_app_pid));
@@ -655,80 +808,6 @@ sub onSSDPDevice
 		pushNotification("SSDP\t$rec->{ip}\t$iot_device");
 	}
 }
-
-
-
-
-
-#==================================================================
-# MAIN
-#==================================================================
-
-
-processCommandLine(@ARGV);
-
-display($dbg_box,-1,"SERVER_PORT $SERVER_PORT") if $SERVER_PORT;
-display($dbg_box,-1,"COM$COM_PORT") if $COM_PORT;
-display($dbg_box,-1,"SOCK_IP: $SOCK_IP::$SOCK_PORT") if $SOCK_IP;
-display($dbg_box,-1,"-rpi") if ($rpi);
-display($dbg_box,-1,"-crlf") if ($crlf);
-display($dbg_box,-1,"-arduino") if $arduino;
-display($dbg_box,-1,"-file_server") if $start_file_server;
-
-
-
-$con->Title("initializing ...");
-display($dbg_box,-1,"Initializing ...");
-
-if (1)
-{
-	$server = Pub::Buddy::buddyServer->new({ PORT => $SERVER_PORT });
-	quit("could not start SERVER on port($SERVER_PORT)") if !$server;
-}
-
-if (!$SERVER_PORT)
-{
-	startBuddyApp();
-	$ssdp_started = Pub::SSDPScan::start($SEARCH_MYIOT,\&onSSDPDevice,28);
-	quit("could not start SSDP_SERVER") if !$ssdp_started;
-}
-
-
-if ($arduino)
-{
-    my $arduino_thread = threads->create(\&listen_for_arduino_thread);
-    $arduino_thread->detach();
-}
-
-
-if ($rpi)
-{
-	if (!$registry_filetime)
-	{
-		error("could not open registry_file $registry_filename!");
-	}
-	else
-	{
-		getKernelFilename();
-		if (!$kernel_filename)
-		{
-			warning($dbg_box,-1,"no kernel filename found in $registry_filename!");
-		}
-		else
-		{
-			$kernel_filetime = getFileTime($kernel_filename);
-			if (!$kernel_filetime)
-			{
-				warning($dbg_box,-1,"kernel $kernel_filename not found!");
-			}
-			else
-			{
-				display($dbg_box,-1,"kernel=$kernel_filename");
-			}
-		}
-	}
-}
-
 
 
 #-------------------------------------------
@@ -920,6 +999,135 @@ sub readProcessPort
 }
 
 
+#==================================================================
+# MAIN
+#==================================================================
+
+processCommandLine(@ARGV);
+
+$con->Title("initializing ...");
+display($dbg_box,-1,"Initializing pid($$) ...");
+
+if (1)
+{
+	$server = Pub::Buddy::buddyServer->new({ PORT => $SERVER_PORT });
+	quit("could not start SERVER on port($SERVER_PORT)") if !$server;
+}
+
+if (!$SERVER_PORT)
+{
+	startBuddyApp();
+	$ssdp_started = Pub::SSDPScan::start($SEARCH_MYIOT,\&onSSDPDevice,28);
+	quit("could not start SSDP_SERVER") if !$ssdp_started;
+}
+
+
+#-----------------------------------------------------------------------------
+# process experiments
+#-----------------------------------------------------------------------------
+
+
+# temporarily remove all pid files on initial invocation
+# and write the pid file for subsequent windows
+
+if (!$SERVER_PORT)
+{
+	my $filenames = getChildPidFilenames();
+	for my $filename (@$filenames)
+	{
+		display($dbg_box,2,"unlinking $filename");
+		unlink "$temp_dir/$filename";
+	}
+}
+else
+{
+	if ($parent_pid && $parent_tab_name)
+	{
+		my $filename = "$temp_dir/$$.$parent_pid.$BUDDY_PID_EXT";
+		display($dbg_box,2,"writing $filename == $parent_tab_name");
+		open OUT, ">$filename";
+		print OUT $parent_tab_name;
+		close OUT;
+	}
+	else
+	{
+		error("parent_pid and parent_tab_name must be specified in non-initial buddyBox windows");
+	}
+}
+
+
+#---------------------
+# processExperiment
+#---------------------
+
+my $already = {};
+
+sub getProcInfo
+{
+	my ($pi,$pid) = @_;
+	my $retval;
+	my @info_array = $pi->GetProcInfo($pid);
+	my $info = shift @info_array;
+	if ($info && ($info->{Name} || $info->{CommandLine}))
+	{
+		$retval ||= {};
+		$retval->{name} = $info->{Name} || '';
+		$retval->{command} = $info->{CommandLine} || '';
+	}
+	#display_hash(0,$level+2,"info($pid)",$info) if $info;
+	return $retval;
+}
+
+
+sub showProcesses
+{
+	my ($pi,$pid,$level) = @_;
+	display(0,$level,"pid($pid)");
+
+	if (!$already->{$pid})
+	{
+		$already->{$pid} = 1;
+		my $info = getProcInfo($pi,$pid);
+		if ($info)
+		{
+			display(0,$level+3,"name   =$info->{name}") ;
+			display(0,$level+3,"command=$info->{command}");
+		}
+	}
+
+	my %subs = $pi->Subprocesses($pid);
+	for my $sub (sort keys %subs)
+	{
+		# display(0,$level+1,"sub($sub)");
+		my $array = $subs{$sub};
+		for my $sub (@$array)
+		{
+			showProcesses($pi,$sub,$level+1)
+				if !$already->{$sub};
+		}
+	}
+}
+
+
+
+sub processExperiment
+{
+	# show the process tree from here
+
+	my $pi = Win32::Process::Info->new(undef,'WMI');
+	if (1)
+	{
+		display(0,1,"PROCESS_TREE starting with this buddyBox($$)");
+		$already = {};
+		showProcesses($pi,$$,2);
+	}
+	# killDeadAppPanes();
+}
+
+
+
+
+
 #==============================================================================
 # THE MAIN LOOP
 #==============================================================================
@@ -933,7 +1141,10 @@ display($dbg_box,0,"STARTING LOOP");
 
 my $loop_num = 0;
 
-while (1)
+# for the initial box, the loop is forever.
+# for others, the loop goes until the server stops
+
+while (!$SERVER_PORT || $server->{running})
 {
 	# print $loop_num++."\n";
 
@@ -991,19 +1202,7 @@ while (1)
         # print "got event '@event'\n" if @event;
         if (@event && isEventCtrlC(@event))			# CTRL-C
         {
-            warning($dbg_box,-1,"exiting buddy!");
-			pushNotification("EXIT");
-			sleep(1);
-
-            if ($port)
-            {
-                $port->close();
-                $port = undef;
-            }
-			$server->stop() if $server;
-			Pub::SSDPScan::stop() if $ssdp_started;
-			# $sock is closed automatically as needed
-            exit(0);
+			exitBuddy();
         }
 
         my $char = getChar(@event);
@@ -1018,6 +1217,10 @@ while (1)
 			elsif ($con && !$SERVER_PORT && ord($char) == 5)         # CTRL-E
 			{
 				startBuddyApp();
+			}
+			elsif ($con && ord($char) eq 16)						# CTRL-P
+			{
+				processExperiment();
 			}
 
 
@@ -1107,7 +1310,7 @@ while (1)
 
 	# finished - miscellaneous
 
-	sleep(0.5);	  # 01);		# keep machine from overheating
+	sleep(0.01);		# keep machine from overheating
 
 }   # while (1) main loop
 
