@@ -162,9 +162,9 @@ use Pub::FS::SessionRemote;
 use Pub::buddy::buddyColors;
 use Pub::buddy::buddyBinary;
 use Pub::buddy::buddyGrab;
+use sigtrap 'handler', \&onSignal, qw(normal-signals);
 
-
-$temp_dir = '/base/temp';
+$| = 1;     # IMPORTANT - TURN PERL BUFFERING OFF MAGIC
 
 
 my $dbg_buddy = 0;
@@ -173,10 +173,6 @@ my $dbg_buddy = 0;
 my $dbg_process = 1;
 	# 0 = the process stuff in arduino_thread
 	# -1 = show the process list
-
-
-
-$| = 1;     # IMPORTANT - TURN PERL BUFFERING OFF MAGIC
 
 
 my $DEFAULT_SOCK_PORT = 23;
@@ -196,6 +192,39 @@ my $KERNEL_UPLOAD_RE = 'Press <space> within \d+ seconds to upload file';
 my $ARDUINO_PROCESS_NAME = 	 $ENV{BUDDY_ARDUINO_NAME}  	|| "arduino-builder.exe";
 my $ARDUINO_SEMAPHORE_FILE = $ENV{BUDDY_ARDUINO_SEM} 	|| "/junk/in_upload_spiffs.txt";
 my $REGISTRY_FILENAME = 	 $ENV{BUDDY_KERNEL_REG} 	|| "/base/bat/console_autobuild_kernel.txt";
+
+
+#---------------------------
+# setup diretories
+#---------------------------
+
+if (0)
+{
+	# so far, would only need $temp_dir if
+	#
+	#   - I wanted a logfile
+	#	- Pub::FS::Server::$USE_FORKING && ($KILL_WAIT || $KILL_PID)
+	#	- $Pub::WX::AppConfig::ini_file was set
+
+	setStandardTempDir("buddy");
+	# print "temp_dir=$temp_dir\n";
+
+	# logfile merely for testing temp_dir
+	# $logfile = "$temp_dir/buddy.log";
+}
+
+if (0)
+{
+	setStandardDataDir("buddy");
+	# print "data_dir=$data_dir\n";
+	# open OUT,">$data_dir/junk.txt";
+	# print OUT "wha ha ha\n";
+	# close OUT;
+}
+
+setStandardCavaResourceDir('/base/Pub/buddy/_resources');
+# print "resource_dir=$resource_dir\n";
+
 
 
 #-----------------------
@@ -224,6 +253,7 @@ my $console = Win32::Console->new(STD_OUTPUT_HANDLE);
 my $console_in = Win32::Console->new(STD_INPUT_HANDLE);
 $console_in->Mode(ENABLE_MOUSE_INPUT | ENABLE_WINDOW_INPUT );
 $console->Attr($COLOR_CONSOLE);
+$console->SetIcon("$resource_dir/buddy.ico");
 
 my $com_port;
 my $com_sock;;
@@ -243,6 +273,13 @@ my $connect_fail_reported = 0;
 #--------------------------------------------
 # output routines and signal handler
 #--------------------------------------------
+
+sub onSignal
+{
+    my ($sig) = @_;
+	buddyWarning("terminating on SIG$sig");
+	exitBuddy();
+}
 
 sub buddyError
 {
@@ -274,13 +311,22 @@ sub quit
 	if (!$quiet)
 	{
 		print "Hit any key to close window -->";
-		while (!$console_in->GetEvents()) {} # getc();
+		# getc();
+
+		my $done = 0;
+		while (!$done)
+		{
+			if ($console_in->GetEvents())
+			{
+				my @event = $console_in->Input();
+				$done = getChar(@event);
+			}
+		}
 	}
 	$console->Title("buddy finished");
 	kill 6,$$;
-	exit(0);
+	# exit(0);
 }
-
 
 sub exitBuddy
 {
@@ -295,16 +341,6 @@ sub exitBuddy
 	$file_server->stop() if $file_server;
 	quit('',$quiet);
 }
-
-
-sub onSignal
-{
-    my ($sig) = @_;
-	buddyWarning("terminating on SIG$sig");
-	exitBuddy();
-}
-
-use sigtrap 'handler', \&onSignal, qw(normal-signals);
 
 
 #-------------------------------------------
@@ -663,6 +699,7 @@ sub startFileClient
 		# own dos box, but note that you will not be able to see it exit.
 
 	my $pid = system 1, $command;
+	display($dbg_buddy,-1,"INVOKE FILE CLIENT WITH PID($pid)");
 	buddyError("Could not start fileClient")
 		if !$pid;
 
@@ -986,10 +1023,12 @@ sub readProcessPort
 # MAIN
 #==================================================================
 
+display($dbg_buddy,-1,"BUDDY STARTED WITH PID($$)");
+
 processCommandLine(@ARGV);
 
 $console->Title("initializing ...");
-display($dbg_buddy,-1,"Initializing ...");
+
 
 checkAuto() if $AUTO;
 
