@@ -1,30 +1,12 @@
-The windows app is really the main process manager,
+After a difficult few days working on the idea of a putty like
+windows UI, and implementing it as BuddyBox.pm and BuddyApp.pm,
+with callbacks and process checking to close the app if the window
+changes, I have decided to revert back to a simpler command line
+approach.
 
-but is started by the initial invocation of buddy,
+The old code is in /junk/maybeSave/buddyV2withAllThatBuddyAppStuff
+inasmuch as there was a lot of learning around Win32::Process::Info.
 
-and remains sacrosanct.
-
-
-
-which really should be a single instance application.
-
-
-
-
-
-
-So, you start the windows app the first time.
-It will in turn, open a child window because
-we need one to run the threaded SSDP scanner.
-
-
-
-
-Options ...
-	start with last open configuration
-	minimize this window on startup
-
-The new command allows one to create a new configuration, and
-must be used the first time.  A configuration consists of
-
-- the port or ip address to use
+So, now I am renaming all the files and things back to lowercase
+buddy, and removing the app, and using the fileClient window as
+an app that can be popped up with ctrl-E.
