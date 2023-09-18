@@ -1083,13 +1083,18 @@ while (1)
 
 	if ($com_port && $file_server_request)
 	{
-		if ($file_server_request =~ /BASE64/)
+		if ($dbg_request < 0)
 		{
-			display($dbg_request,0,"main loop sending file_server_request (BASE64) len=".length($file_server_request));
-		}
-		else
-		{
-			display($dbg_request,0,"main loop sending file_server_request($file_server_request)");
+			if ($file_server_request =~ /BASE64/)
+			{
+				display($dbg_request,0,"main loop sending file_server_request (BASE64) len=".length($file_server_request));
+			}
+			else
+			{
+				my $show_request = $file_server_request;
+				$show_request =~ s/\r/\r\n/g;
+				display($dbg_request,0,"main loop sending file_server_request($show_request)");
+			}
 		}
 
 		# if it's been more than 5 seconds since we last wrote it,
@@ -1101,7 +1106,7 @@ while (1)
 			my $now = time();
 			if ($now > $last_ctrl_a + $CTRL_A_TIMEOUT)
 			{
-				display($dbg_request,0,"main loop sending ctrlA");
+				display($dbg_request+1,0,"main loop sending ctrlA");
 				$com_port->write(chr(1));
 				sleep(0.3);
 			}
@@ -1194,7 +1199,7 @@ while (1)
 
     if ($in_arduino_build && $com_port)
     {
-        display($dbg_buddy+1,-1,"COM$COM_PORT closed for Arduino Build");
+        buddyMsg("COM$COM_PORT closed for Arduino Build");
         $com_port->close();
         $com_port = undef;
         showStatus();
