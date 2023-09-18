@@ -342,6 +342,15 @@ sub exitBuddy
 	quit('',$quiet);
 }
 
+sub buddyNotify
+{
+	my ($enable,$msg) = @_;
+	setRemoteSessionConnected($enable);
+	buddyMsg($msg);
+	my $send_msg = ($enable ? "ENABLE" : "DISABLE")." - $msg";
+	notifyAll($send_msg) if $file_server;
+}
+
 
 #-------------------------------------------
 # processCommandLine()
@@ -612,13 +621,14 @@ sub connectSocket
 	$com_sock = IO::Socket::INET->new(@psock);
 	if (!$com_sock)
 	{
-		buddyWarning("could not connect to %sock_ip:$SOCK_PORT")
+		buddyNotify(0,"could not connect to %sock_ip:$SOCK_PORT")
 			if !$connect_fail_reported;
 	}
 	else
 	{
 		# setsockopt($com_sock, SOL_SOCKET, SO_KEEPALIVE, 1);
-		buddyMsg("Connected to $SOCK_IP:$SOCK_PORT");
+
+		budyNotify(1,"Connected to $SOCK_IP:$SOCK_PORT");
 		binmode $com_sock;
 		$com_sock->blocking(0);
 
@@ -635,7 +645,7 @@ sub initComPort
 
     if ($com_port)
     {
-        buddyMsg("COM$COM_PORT opened");
+		buddyNotify(1,"COM$COM_PORT opened");
 
         # This code modifes Win32::SerialPort to allow higher baudrates
 
@@ -676,7 +686,7 @@ sub initComPort
     }
 	else
 	{
-		buddyWarning("could not connect to COM$COM_PORT")
+		buddyNotify(0,"could not connect to COM$COM_PORT")
 			if !$connect_fail_reported;
 	}
 	$connect_fail_reported = 1;
@@ -773,7 +783,7 @@ sub systemCheck
             # we set it to undef below.  So far, no negative
             # side effects from this ...
 
-            buddyMsg("COM$COM_PORT disconnected");
+            buddyNotify(0,"COM$COM_PORT disconnected");
             $com_port = undef;
             showStatus();
         }
@@ -874,7 +884,7 @@ sub readProcessPort
 		if ($! && $! !~ /A non-blocking socket operation could not be completed immediately/)
 		{
 			display($dbg_buddy+1,-1,"ERROR: $!");
-			buddyWarning("Lost Connection to $SOCK_IP:$SOCK_PORT .. retrying");
+			buddyNotify("Lost Connection to $SOCK_IP:$SOCK_PORT");
 			$com_sock->close();
 			$com_sock = undef;
 			showStatus();
@@ -1060,7 +1070,7 @@ if ($START_FILE_SERVER)
 }
 
 startFileClient()
-	if $START_FILE_CLIENT && ($com_port || $com_sock);
+	if $START_FILE_CLIENT;	# && ($com_port || $com_sock);
 
 
 #-----------------------
@@ -1199,7 +1209,7 @@ while (1)
 
     if ($in_arduino_build && $com_port)
     {
-        buddyMsg("COM$COM_PORT closed for Arduino Build");
+		buddyNotify(0,"COM$COM_PORT closed for Arduino Build");
         $com_port->close();
         $com_port = undef;
         showStatus();
