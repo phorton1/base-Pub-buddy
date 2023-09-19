@@ -164,6 +164,10 @@ use Pub::buddy::buddyBinary;
 use Pub::buddy::buddyGrab;
 use sigtrap 'handler', \&onSignal, qw(normal-signals);
 
+createSTDOUTSemaphore("buddySTDOUT");
+
+
+
 $| = 1;     # IMPORTANT - TURN PERL BUFFERING OFF MAGIC
 
 
@@ -856,10 +860,14 @@ sub systemCheck
 # readProcessPort()
 #-------------------------------------------
 
+my $is_esc_line = 0;
 my $esc_cmd = '';
+my $esc_color = $COLOR_CONSOLE;
+my $esc_cls = 0;
+
 my $in_line = '';
 my $tmp_file_reply = '';
-my $is_esc_line = 0;
+
 
 sub readProcessPort
 {
@@ -900,6 +908,20 @@ sub readProcessPort
 	#---------------------------------------
 	# process bytes from port or socket
 	#---------------------------------------
+	# I used to support character by character output for
+	# 'esc lines' to support things like myIOT::connect(),
+	# but it looks like that is no longer necessary, so
+	# henceforth I am buffering 'esc lines' and their
+	# 'esc commands' so that they work better with
+	# display from child process (fileClient) and threads
+	# (FS:RemoteServer and SessionRemote)
+	#
+	# Although the below code is cleaner, and acts a little
+	# nicer if you don't care about char-by-char output,
+	# it still does not work in a multi-process environment,
+	# though it somewhat apears to work within threads in
+	# this process.
+
 
 	my $do_upload = 0;
 	for (my $i=0; $i<$bytes; $i++)
@@ -917,7 +939,7 @@ sub readProcessPort
 			{
 				my $color = $1;
 				# print "setting color($color)\n";
-				$console->Attr(colorAttr($color));
+				$esc_color = colorAttr($color);
 				$esc_cmd = '';
 			}
 			if ($esc_cmd =~ /\x1b\[(\d+);(\d+)m/)
@@ -925,12 +947,12 @@ sub readProcessPort
 				my ($fg,$bg) = ($1,$2);
 				$bg -= 10;
 				# print "setting color($fg,$bg)\n";
-				$console->Attr(colorAttr($bg)<<4 | colorAttr($fg));
+				$esc_color = colorAttr($bg)<<4 | colorAttr($fg);
 				$esc_cmd = '';
 			}
 			elsif ($esc_cmd =~ /\x1b\[[23]J/)
 			{
-				$console->Cls();
+				$esc_cls = 1;
 				$esc_cmd = '';
 			}
 			elsif (length($esc_cmd) > 9)
@@ -945,71 +967,63 @@ sub readProcessPort
 		{
 			# print("starting escape command\n");
 			$esc_cmd = $c;
+			if (!$is_esc_line)
+			{
+				$esc_color = $COLOR_CONSOLE;
+				$esc_cls = 0;
+			}
 			$is_esc_line = 1;
 		}
 
-		else  # default character handler
+		elsif (ord($c) == 10)		# end of line
 		{
-			# we require crlf to indicate the end of a line
-			# under the assumption that no-one will send us a 'command'
-			# in the middle of an 'escape line', if this is an 'escape line'
-			# we print the individual characters so that we can get
-			# progress thingees ...
+			# display(0,0,"inline=$in_line");
 
-			if ($is_esc_line)
+			$in_line =~ s/\s+$//g;
+
+			if ($in_line =~ /SCREEN_GRAB\((\d+)x(\d+)\)/)
 			{
-				print $c;					# including cr and/or lf
-				if (ord($c) == 10)			# we have finished the line
+				($grab_width, $grab_height) = ($1,$2);
+				$in_screen_grab = $grab_width * $grab_height * 3;
+				warning($dbg_buddy,-1,"doing SCREEN_GRAB($grab_width X $grab_height) $in_screen_grab bytes");
+				$screen_grab = '';
+			}
+			elsif ($in_remote_request && $in_line =~ s/^file_reply://)
+			{
+				display($dbg_request,0,"file_reply: $in_line");
+				$tmp_file_reply .= $in_line."\n";
+			}
+			elsif ($in_remote_request && $in_line =~ /^file_reply_end/)
+			{
+				display($dbg_request,0,"file_reply end");
+				display($dbg_request+1,0,"setting file_server_reply==>$tmp_file_reply<==");
+				push @file_server_replies,$tmp_file_reply;
+				$tmp_file_reply = '';
+			}
+			else
+			{
+				my $got_sem = waitSTDOUTSemaphore();
+				if ($is_esc_line)
 				{
-					$console->Attr($COLOR_CONSOLE);
+					$console->Cls() if $esc_cls;
+					$console->Attr($esc_color);
 					$is_esc_line = 0;
+					$esc_cmd = '';
+					$esc_cls = 0;
+					$esc_color = $COLOR_CONSOLE;
 				}
+				print $in_line."\n";
+				$console->Attr($COLOR_CONSOLE);
+				releaseSTDOUTSemaphore() if $got_sem;
+				$do_upload = $kernel_file_changed && $in_line =~ $KERNEL_UPLOAD_RE;
 			}
 
-			# otherwise, we build a line into the buffer and deal with it on chr(10)
-
-			elsif (ord($c) == 10)
-			{
-				# display(0,0,"inline=$in_line");
-
-				if ($in_line =~ /SCREEN_GRAB\((\d+)x(\d+)\)/)
-				{
-					($grab_width, $grab_height) = ($1,$2);
-					$in_screen_grab = $grab_width * $grab_height * 3;
-					warning($dbg_buddy,-1,"doing SCREEN_GRAB($grab_width X $grab_height) $in_screen_grab bytes");
-					$screen_grab = '';
-				}
-				elsif ($file_reply_pending && $in_line =~ s/^file_reply://)
-				{
-					$in_line =~ s/\s+$//g;
-					display($dbg_request,0,"file_reply: $in_line");
-					$tmp_file_reply .= $in_line."\n";
-				}
-				elsif ($file_reply_pending && $in_line =~ /^file_reply_end/)
-				{
-					display($dbg_request,0,"file_reply end");
-					display($dbg_request+1,0,"setting file_server_reply==>$tmp_file_reply<==");
-					$file_server_reply = $tmp_file_reply;
-					$tmp_file_reply = '';
-					$file_reply_pending = 0;
-				}
-				else	# case where a printable line DID NOT start with an escape sequence
-				{
-					print $in_line."\n";
-					$console->Attr($COLOR_CONSOLE);
-					$do_upload = $kernel_file_changed && $in_line =~ $KERNEL_UPLOAD_RE;
-				}
-
-				$in_line = '';
-			}
-
-			elsif (ord($c) != 13)
-			{
-				$in_line .= $c;
-			}
-
-
-		}	# default character handler
+			$in_line = '';
+		}
+		elsif (ord($c) != 13)
+		{
+			$in_line .= $c;
+		}
 	}	# for each byte
 
 	$console->Flush();
