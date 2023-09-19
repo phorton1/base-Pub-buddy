@@ -866,7 +866,6 @@ my $esc_color = $COLOR_CONSOLE;
 my $esc_cls = 0;
 
 my $in_line = '';
-my $tmp_file_reply = '';
 
 
 sub readProcessPort
@@ -988,17 +987,27 @@ sub readProcessPort
 				warning($dbg_buddy,-1,"doing SCREEN_GRAB($grab_width X $grab_height) $in_screen_grab bytes");
 				$screen_grab = '';
 			}
-			elsif ($in_remote_request && $in_line =~ s/^file_reply://)
+			elsif ($in_line =~ s/^file_reply\((\d+)\)://)
 			{
-				display($dbg_request,0,"file_reply: $in_line");
-				$tmp_file_reply .= $in_line."\n";
+				my $req_num = $1;
+				display($dbg_request,-1,"file_reply($req_num): $in_line");
+				while ($file_server_reply_ready{$req_num})
+				{
+					warning($dbg_request,-1,"waiting for !ready");
+					sleep(1);
+				}
+				$file_server_reply{$req_num} .= $in_line."\n";
 			}
-			elsif ($in_remote_request && $in_line =~ /^file_reply_end/)
+			elsif ($in_line =~ /^file_reply_end\((\d+)\)/)
 			{
-				display($dbg_request,0,"file_reply end");
-				display($dbg_request+1,0,"setting file_server_reply==>$tmp_file_reply<==");
-				push @file_server_replies,$tmp_file_reply;
-				$tmp_file_reply = '';
+				my $req_num = $1;
+				display($dbg_request,-1,"file_reply end($req_num)");
+				while ($file_server_reply_ready{$req_num})
+				{
+					warning($dbg_request,-1,"waiting for !ready");
+					sleep(1);
+				}
+				$file_server_reply_ready{$req_num} = 1;
 			}
 			else
 			{
