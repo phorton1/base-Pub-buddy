@@ -981,7 +981,7 @@ sub readProcessPort
 				}
 				elsif ($file_reply_pending && $in_line =~ s/^file_reply://)
 				{
-					while ($in_line =~ s/\n|\r//g) {}
+					$in_line =~ s/\s+$//g;
 					display($dbg_request,0,"file_reply: $in_line");
 					$tmp_file_reply .= $in_line."\n";
 				}
