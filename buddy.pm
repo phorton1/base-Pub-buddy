@@ -1147,7 +1147,7 @@ while (1)
 
 		# write the request
 
-		$com_port->write($file_server_request."\r\n");
+		$com_port->write($file_server_request);
 		$file_server_request = '';
 		$last_ctrl_a = time();
 	}
