@@ -349,7 +349,7 @@ sub exitBuddy
 sub buddyNotify
 {
 	my ($enable,$msg) = @_;
-	setRemoteSessionConnected($enable);
+	Pub::FS::SessionRemote::setComPortConnected($enable);
 	buddyMsg($msg);
 	my $send_msg = ($enable ? $PROTOCOL_ENABLE: $PROTOCOL_DISABLE).$msg;
 	notifyAll($send_msg) if $file_server;
@@ -363,7 +363,7 @@ sub buddyNotify
 sub processCommandLine
 {
 	my (@args) = @_;
-	display($dbg_buddy,-1,"processCommandLine(".scalar(@args).")");
+	display($dbg_buddy+1,-1,"processCommandLine(".scalar(@args).")");
 
 	my $arg_num = 0;
 	while ($arg_num < @args)
@@ -433,13 +433,13 @@ sub processCommandLine
 		}
 	}
 
-	display($dbg_buddy,-1,"    -auto") if $AUTO;
-	display($dbg_buddy,-1,"    COM_PORT = $COM_PORT") if $COM_PORT;
-	display($dbg_buddy,-1,"    SOCK_IP = $SOCK_IP:$SOCK_PORT") if $SOCK_IP;
-	display($dbg_buddy,-1,"    -rpi") if ($RPI);
-	display($dbg_buddy,-1,"    -crlf") if ($CRLF);
-	display($dbg_buddy,-1,"    -arduino") if $ARDUINO;
-	display($dbg_buddy,-1,"    -file_server") if $START_FILE_SERVER;
+	display($dbg_buddy+1,-1,"    -auto") if $AUTO;
+	display($dbg_buddy+1,-1,"    COM_PORT = $COM_PORT") if $COM_PORT;
+	display($dbg_buddy+1,-1,"    SOCK_IP = $SOCK_IP:$SOCK_PORT") if $SOCK_IP;
+	display($dbg_buddy+1,-1,"    -rpi") if ($RPI);
+	display($dbg_buddy+1,-1,"    -crlf") if ($CRLF);
+	display($dbg_buddy+1,-1,"    -arduino") if $ARDUINO;
+	display($dbg_buddy+1,-1,"    -file_server") if $START_FILE_SERVER;
 
 	quit("A COM port, IP address, or AUTO must be specified")
 		if !$COM_PORT && !$SOCK_IP && !$AUTO;
@@ -705,7 +705,7 @@ sub startFileClient
 	# print "EXE_PATH=".Cava::Packager::GetExePath()."\n";	# full executable pathname
 	# print "EXE=".Cava::Packager::GetExecutable()."\n";		# leaf executable filename
 
-	buddyMsg("starting fileClient on port($ACTUAL_SERVER_PORT)");
+	buddyMsg("Starting fileClient on port($ACTUAL_SERVER_PORT)");
 	my $command = Cava::Packager::IsPackaged() ?
 		Cava::Packager::GetBinPath()."/fileClient.exe $ACTUAL_SERVER_PORT" :
 		"perl /base/Pub/FS/fileClient.pm $ACTUAL_SERVER_PORT";
@@ -713,7 +713,7 @@ sub startFileClient
 		# own dos box, but note that you will not be able to see it exit.
 
 	my $pid = system 1, $command;
-	display($dbg_buddy,-1,"INVOKE FILE CLIENT WITH PID($pid)");
+	display($dbg_buddy+1,-1,"INVOKE FILE CLIENT WITH PID($pid)");
 	buddyError("Could not start fileClient")
 		if !$pid;
 
@@ -1079,6 +1079,8 @@ if ($ARDUINO)
 
 if ($START_FILE_SERVER)
 {
+	buddyMsg("Starting fileServer");
+	sleep(0.2);	# for message to display
 	$file_server = Pub::FS::RemoteServer->new();
 	quit("could not start fileServer") if !$file_server;
 
@@ -1086,7 +1088,7 @@ if ($START_FILE_SERVER)
 	my $FILE_SERVER_WAIT = 5;
 	while ($try++ < $FILE_SERVER_WAIT && !$ACTUAL_SERVER_PORT)
 	{
-		display($dbg_buddy,-1,"waiting($try) for ACTUAL_SERVER_PORT");
+		display($dbg_buddy+1,-1,"waiting($try) for ACTUAL_SERVER_PORT");
 		sleep(1);
 	}
 	quit("could not get fileServer port") if !$ACTUAL_SERVER_PORT;
