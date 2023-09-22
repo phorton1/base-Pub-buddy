@@ -351,7 +351,7 @@ sub buddyNotify
 	my ($enable,$msg) = @_;
 	setRemoteSessionConnected($enable);
 	buddyMsg($msg);
-	my $send_msg = ($enable ? "ENABLE" : "DISABLE")." - $msg";
+	my $send_msg = ($enable ? $PROTOCOL_ENABLE: $PROTOCOL_DISABLE).$msg;
 	notifyAll($send_msg) if $file_server;
 }
 
