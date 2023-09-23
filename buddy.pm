@@ -42,7 +42,7 @@
 #			   for teensyPiLooper for -file_server.
 #
 #   -file_server   for use currently only with teensyExpression, starts a
-#          RemoteServer which can be hit with my fileClient over a
+#          SerialBridge which can be hit with my fileClient over a
 #          localhost port to allow for manipulating the files on the
 #          teensyExpression 3.6 SD Card.
 #
@@ -157,8 +157,8 @@ use IO::Socket::INET;
 use Pub::Utils;
 use Pub::ComPorts;
 use Pub::SSDPScan;
-use Pub::FS::RemoteServer;
-use Pub::FS::SessionRemote;
+use Pub::FS::SerialBridge;
+use Pub::FS::SerialSession;
 use Pub::buddy::buddyColors;
 use Pub::buddy::buddyBinary;
 use Pub::buddy::buddyGrab;
@@ -349,7 +349,7 @@ sub exitBuddy
 sub buddyNotify
 {
 	my ($enable,$msg) = @_;
-	Pub::FS::SessionRemote::setComPortConnected($enable);
+	Pub::FS::SerialSession::setComPortConnected($enable);
 	buddyMsg($msg);
 	my $send_msg = ($enable ? $PROTOCOL_ENABLE: $PROTOCOL_DISABLE).$msg;
 	notifyAll($send_msg) if $file_server;
@@ -708,7 +708,7 @@ sub startFileClient
 	buddyMsg("Starting fileClient on port($ACTUAL_SERVER_PORT)");
 	my $command = Cava::Packager::IsPackaged() ?
 		Cava::Packager::GetBinPath()."/fileClient.exe $ACTUAL_SERVER_PORT" :
-		"perl /base/Pub/FS/fileClient.pm $ACTUAL_SERVER_PORT";
+		"perl /base/Pub/FC/fileClient.pm $ACTUAL_SERVER_PORT";
 		# add 'start' to the previous line to put the fileClient in it's
 		# own dos box, but note that you will not be able to see it exit.
 
@@ -913,7 +913,7 @@ sub readProcessPort
 	# henceforth I am buffering 'esc lines' and their
 	# 'esc commands' so that they work better with
 	# display from child process (fileClient) and threads
-	# (FS:RemoteServer and SessionRemote)
+	# (FS:SerialBridge and SerialSession)
 	#
 	# Although the below code is cleaner, and acts a little
 	# nicer if you don't care about char-by-char output,
@@ -991,23 +991,23 @@ sub readProcessPort
 			{
 				my $req_num = $1;
 				display($dbg_request,-1,"file_reply($req_num): $in_line");
-				while ($file_server_reply_ready{$req_num})
+				while ($serial_file_reply_ready{$req_num})
 				{
 					warning($dbg_request,-1,"waiting for !ready");
 					sleep(1);
 				}
-				$file_server_reply{$req_num} .= $in_line."\n";
+				$serial_file_reply{$req_num} .= $in_line."\n";
 			}
 			elsif ($in_line =~ /^file_reply_end\((\d+)\)/)
 			{
 				my $req_num = $1;
 				display($dbg_request,-1,"file_reply end($req_num)");
-				while ($file_server_reply_ready{$req_num})
+				while ($serial_file_reply_ready{$req_num})
 				{
 					warning($dbg_request,-1,"waiting for !ready");
 					sleep(1);
 				}
-				$file_server_reply_ready{$req_num} = 1;
+				$serial_file_reply_ready{$req_num} = 1;
 			}
 			else
 			{
@@ -1081,7 +1081,7 @@ if ($START_FILE_SERVER)
 {
 	buddyMsg("Starting fileServer");
 	sleep(0.2);	# for message to display
-	$file_server = Pub::FS::RemoteServer->new();
+	$file_server = Pub::FS::SerialBridge->new();
 	quit("could not start fileServer") if !$file_server;
 
 	my $try = 0;
@@ -1114,21 +1114,21 @@ my $loop_num = 0;
 while (1)
 {
 	# print $loop_num++."\n";
-	# transmit pending $file_server_request
+	# transmit pending $serial_file_request
 
-	if ($com_port && $file_server_request)
+	if ($com_port && $serial_file_request)
 	{
 		if ($dbg_request < 0)
 		{
-			if ($file_server_request =~ /BASE64/)
+			if ($serial_file_request =~ /BASE64/)
 			{
-				display($dbg_request,0,"main loop sending file_server_request (BASE64) len=".length($file_server_request));
+				display($dbg_request,0,"main loop sending serial_file_request (BASE64) len=".length($serial_file_request));
 			}
 			else
 			{
-				my $show_request = $file_server_request;
+				my $show_request = $serial_file_request;
 				$show_request =~ s/\r/\r\n/g;
-				display($dbg_request,0,"main loop sending file_server_request($show_request)");
+				display($dbg_request,0,"main loop sending serial_file_request($show_request)");
 			}
 		}
 
@@ -1149,8 +1149,8 @@ while (1)
 
 		# write the request
 
-		$com_port->write($file_server_request);
-		$file_server_request = '';
+		$com_port->write($serial_file_request);
+		$serial_file_request = '';
 		$last_ctrl_a = time();
 	}
 
