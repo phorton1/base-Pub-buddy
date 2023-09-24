@@ -994,7 +994,7 @@ sub readProcessPort
 				while ($serial_file_reply_ready{$req_num})
 				{
 					warning($dbg_request+2,-1,"waiting for !ready");
-					sleep(1);
+					sleep(0.01);
 				}
 				$serial_file_reply{$req_num} .= $in_line."\n";
 			}
@@ -1002,11 +1002,11 @@ sub readProcessPort
 			{
 				my $req_num = $1;
 				display($dbg_request,-1,"file_reply end($req_num)");
-				while ($serial_file_reply_ready{$req_num})
-				{
-					warning($dbg_request+2,-1,"waiting for !ready");
-					sleep(1);
-				}
+				# while ($serial_file_reply_ready{$req_num})
+				# {
+				# 	warning($dbg_request+2,-1,"waiting for !ready");
+				# 	sleep(0.1);
+				# }
 				$serial_file_reply_ready{$req_num} = 1;
 			}
 			else
