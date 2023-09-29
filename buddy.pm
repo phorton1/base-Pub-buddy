@@ -1114,13 +1114,15 @@ while (1)
 	{
 		if ($dbg_request < 0)
 		{
-			if ($serial_file_request =~ /BASE64/)
+			my $show_request = $serial_file_request;
+			$show_request =~ s/\s$//g;
+			if ($show_request =~ s/(.*$PROTOCOL_BASE64\t.*\t.*\t)//)
 			{
-				display($dbg_request,0,"main loop sending serial_file_request (BASE64) len=".length($serial_file_request));
+				my $hdr = $1;
+				display($dbg_request,0,"main loop sending serial_file_request($hdr\t".length($show_request)." encoded bytes)");
 			}
 			else
 			{
-				my $show_request = $serial_file_request;
 				$show_request =~ s/\r/\r\n/g;
 				display($dbg_request,0,"main loop sending serial_file_request($show_request)");
 			}
