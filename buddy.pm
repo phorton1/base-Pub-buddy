@@ -990,24 +990,18 @@ sub readProcessPort
 			elsif ($in_line =~ s/^file_reply\((\d+)\)://)
 			{
 				my $req_num = $1;
-				display($dbg_request,-1,"file_reply($req_num): $in_line");
-				while ($serial_file_reply_ready{$req_num})
+				if ($dbg_request <= 0)
 				{
-					warning($dbg_request+2,-1,"waiting for !ready");
+					my $show_line = $in_line;
+					$show_line =~ s/\r/\r\n/g;
+					display($dbg_request,-1,"file_reply($req_num): $show_line");
+				}
+				while ($serial_file_reply{$req_num})
+				{
+					warning($dbg_request+2,-1,"waiting for !serial_file_reply($req_num)");
 					sleep(0.01);
 				}
-				$serial_file_reply{$req_num} .= $in_line."\n";
-			}
-			elsif ($in_line =~ /^file_reply_end\((\d+)\)/)
-			{
-				my $req_num = $1;
-				display($dbg_request,-1,"file_reply end($req_num)");
-				# while ($serial_file_reply_ready{$req_num})
-				# {
-				# 	warning($dbg_request+2,-1,"waiting for !ready");
-				# 	sleep(0.1);
-				# }
-				$serial_file_reply_ready{$req_num} = 1;
+				$serial_file_reply{$req_num} .= $in_line;	# ."\n";	# why the terminal \n??
 			}
 			else
 			{
@@ -1029,7 +1023,7 @@ sub readProcessPort
 
 			$in_line = '';
 		}
-		elsif (ord($c) != 13)
+		else # if (ord($c) != 13)
 		{
 			$in_line .= $c;
 		}
