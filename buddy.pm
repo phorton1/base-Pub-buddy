@@ -992,9 +992,18 @@ sub readProcessPort
 				my $req_num = $1;
 				if ($dbg_request <= 0)
 				{
-					my $show_line = $in_line;
-					$show_line =~ s/\r/\r\n/g;
-					display($dbg_request,-1,"file_reply($req_num): $show_line");
+					my $show_request = $in_line;
+					$show_request =~ s/\s$//g;
+					if ($show_request =~ s/(.*$PROTOCOL_BASE64\t.*\t.*\t)//)
+					{
+						my $hdr = $1;
+						display($dbg_request,0,"main loop got file_reply($hdr\t".length($show_request)." encoded bytes)");
+					}
+					else
+					{
+						$show_request =~ s/\r/\r\n/g;
+						display($dbg_request,0,"main loop got file_reply($show_request)");
+					}
 				}
 				while ($serial_file_reply{$req_num})
 				{
