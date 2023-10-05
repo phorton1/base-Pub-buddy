@@ -706,7 +706,7 @@ sub startFileClient
 	# print "EXE=".Cava::Packager::GetExecutable()."\n";		# leaf executable filename
 
 	buddyMsg("Starting fileClient on port($ACTUAL_SERVER_PORT)");
-	my $params = "-cid buddy -s local -s local -sid \"\" -p $ACTUAL_SERVER_PORT";
+	my $params = "-buddy $ACTUAL_SERVER_PORT";
 	my $command = Cava::Packager::IsPackaged() ?
 		Cava::Packager::GetBinPath()."/fileClient.exe $params" :
 		"perl /base/Pub/FC/fileClient.pm $params";
