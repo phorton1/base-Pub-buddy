@@ -706,9 +706,10 @@ sub startFileClient
 	# print "EXE=".Cava::Packager::GetExecutable()."\n";		# leaf executable filename
 
 	buddyMsg("Starting fileClient on port($ACTUAL_SERVER_PORT)");
+	my $params = "-cid buddy -s local -s local -sid \"\" -p $ACTUAL_SERVER_PORT";
 	my $command = Cava::Packager::IsPackaged() ?
-		Cava::Packager::GetBinPath()."/fileClient.exe $ACTUAL_SERVER_PORT" :
-		"perl /base/Pub/FC/fileClient.pm $ACTUAL_SERVER_PORT";
+		Cava::Packager::GetBinPath()."/fileClient.exe $params" :
+		"perl /base/Pub/FC/fileClient.pm $params";
 		# add 'start' to the previous line to put the fileClient in it's
 		# own dos box, but note that you will not be able to see it exit.
 
