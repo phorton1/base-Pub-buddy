@@ -164,8 +164,9 @@ use Pub::buddy::buddyBinary;
 use Pub::buddy::buddyGrab;
 use sigtrap 'handler', \&onSignal, qw(normal-signals);
 
+$debug_level = -5 if Cava::Packager::IsPackaged();
+	# set release debug level
 createSTDOUTSemaphore("buddySTDOUT");
-
 
 
 $| = 1;     # IMPORTANT - TURN PERL BUFFERING OFF MAGIC
@@ -201,20 +202,14 @@ my $REGISTRY_FILENAME = 	 $ENV{BUDDY_KERNEL_REG} 	|| "/base/bat/console_autobuil
 #---------------------------
 # setup diretories
 #---------------------------
+# If buddy has prefs, they will be more 'standard' Pub::Prefs
+# than fileClient, and will be assumed to be editable by hand
+# only, holding no program state.
 
 if (0)
 {
-	# so far, would only need $temp_dir if
-	#
-	#   - I wanted a logfile
-	#	- Pub::FS::Server::$USE_FORKING && ($KILL_WAIT || $KILL_PID)
-	#	- $Pub::WX::AppConfig::ini_file was set
-
 	setStandardTempDir("buddy");
 	# print "temp_dir=$temp_dir\n";
-
-	# logfile merely for testing temp_dir
-	# $logfile = "$temp_dir/buddy.log";
 }
 
 if (0)
@@ -605,7 +600,8 @@ sub showStatus
 	$title .= " -crlf" if $CRLF;
 	$title .= " -arduino" if $ARDUINO;
 	$title .= " IN_BUILD" if $in_arduino_build;
-	$title .= " -file_server " if ($START_FILE_SERVER);
+	$title .= " -file_server $ACTUAL_SERVER_PORT"
+		if $ACTUAL_SERVER_PORT && $START_FILE_SERVER;
 	$title .= " -rpi $kernel_filename" if $RPI;
 	$console->Title($title);
 }
@@ -1096,6 +1092,8 @@ if ($START_FILE_SERVER)
 		sleep(1);
 	}
 	quit("could not get fileServer port") if !$ACTUAL_SERVER_PORT;
+	buddyMsg("fileServer started on port $ACTUAL_SERVER_PORT");
+	showStatus();
 }
 
 startFileClient()
