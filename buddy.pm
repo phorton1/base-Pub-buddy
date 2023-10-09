@@ -959,7 +959,7 @@ sub readProcessPort
 
 		# escape commands cannot be sent in the middle of line
 
-		elsif (!$in_line && ord($c) == 27)
+		elsif (ord($c) == 27)	# (!$in_line && ord($c) == 27)
 		{
 			# print("starting escape command\n");
 			$esc_cmd = $c;
