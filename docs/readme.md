@@ -3,7 +3,7 @@
 Buddy is a general Serial Port and Telnet monitor with many additional features.
 In addition to the source code for Buddy, this repository includes a
 [**Windows Installer**](https://github.com/phorton1/base-Pub-buddy/tree/master/releases)
-to install a completely ready to run version of the program on any *Microsoft Windows*
+to install a completely ready-to-run version of the program on any *Microsoft Windows*
 machine. Buddy is completely *Open Source Pure Perl*. Some key features of
 Buddy include:
 
@@ -16,6 +16,13 @@ Buddy include:
   [**fileClient**](https://github.com/phorton1/base-Pub-fileClient) Windows application
   that is automatically installed along with Buddy
 
+Here is a screenshot of Buddy connected to the
+[teensyExpression pedal](https://github.com/phorton1/Arduino-teensyExpression)
+showing the output from Buddy itself in **white**, and showing the debugging
+output from TE in <font color='green'><b>green</b></font> with a *Warning*
+shown in <font color='gold'><b>yellow</b></font>:
+
+![buddy-teensyExpression.jpg](images/buddy-teensyExpression.jpg)
 
 Buddy is built around the Windows Console (Dos Box) and can display ANSI colors
 encoded as escape sequences.  Buddy intercepts various CTRL key combinations,
@@ -29,7 +36,7 @@ IDE to upload code over the COM Port during a build.
 
 Buddy also very specifically can upload rPi *kernel.img* files to a Raspberry Pi running
 my bare-metal
-[rPi bootloader]((https://github.com/phorton1/circle-prh/tree/master/bootloader)),
+[rPi bootloader](https://github.com/phorton1/circle-prh/tree/master/bootloader),
 which is part of the
 [rPi circle-prh](https://github.com/phorton1/circle-prh) bare-metal OS effort,
 from which I developed the
@@ -93,24 +100,75 @@ The order of priorities is as follows:
   [**myIOTDevice**](https://github.com/phorton1/Arduino-libraries-myIOT)
   via SSDP, which would include any of my
   [Clocks](https://github.com/phorton1/Arduino-theClock3) and the
-  [bilgeAlarm[(https://github.com/phorton1/Arduino-bilgeAlarm), it
+  [bilgeAlarm](https://github.com/phorton1/Arduino-bilgeAlarm), it
   will open a *telnet* session to the device by adding the appropriate
   "**IP_ADDRESS[:PORT] -crlf**" to the command line.
 - And finally, if nothing else has been found, and Buddy finds
   **any open COMM port**, it will open just open that at the
-  default BAUD_RATE.
+  default or given BAUD_RATE.
 
 If **-auto** is used, and Buddy can find nothing to connect to,
 it will **exit**.
 
-## fileServer and fileClient
+## Summary of CTRL Keys
+
+While you are connected to a device with Buddy, certain **CTRL** keys
+will be intercepted by Buddy and **not sent** to the device. Here is
+a list of the CTRL keys that Buddy responds to
+
+- **CTRL-C** - exits Buddy
+- **CTRL-D** - clears the Screen
+- **CTRL-E** - pops up the [fileClient](https://github.com/phorton1/base-Pub-fileClient)
+  if using **-file_server** or **-file_client** command line options
+- **CTRL-X** - initiates an **upload** of a *kernel.img* to the
+  [**rPi**](https://github.com/phorton1/circle-prh/tree/master/bootloader) \
+  if using the **-rpi** command line option
+
+
+## the fileClient
+
+When you install Buddy with the
+[Windows Installer](https://github.com/phorton1/base-Pub-buddy/tree/master/releases),
+it also installs an executable (EXE) for the [fileClient](https://github.com/phorton1/base-Pub-fileClient).
+
+Although the *fileClient* is a stand-alone general purpose **User Interface** to any
+*fileServer* implemented using my [Pub::FS](https://github.com/phorton1/base-Pub/tree/master/FS)
+architecture, it has a special relationship to Buddy.  If you had connected to the
+[teensyExpression](https://github.com/phorton1/Arduino-teensyExpression) pedal, as
+shown in the *above example window*, and then pressed **CTRL-E** (or had specified
+**-file_client** on the command line) the fileClient would **pop up** looking something
+like this:
+
+![fileCliient-local-TE.jpg](images/fileCliient-local-TE.jpg)
+
+This window allows you to transfer files to and from the your *Windows* machine
+(from the **/junk/data** directory) to the *SD Card* in the
+[teensyExpression](https://github.com/phorton1/Arduino-teensyExpression).
+The *left* pane shows the files on the Windows machine and the *right*
+pane shows the files on the SD Card.
+
+Files that have the same *timestamp and size* are shown in <font color='blue'><b>blue</b></font>.
+
+In this example, the file **default_modal.rig** on the Windows machine is
+**newer** than the one on the SDCard, and
+shown in <font color='red'><b>red</b></font>, whereas the file on the SD Card
+is **older** and shown in <font color='magenta'><b>magenta</b></font>.
+This use of **colors** allows you to easily identify files that need
+to be transferred from one machine to the other.  By **right clicking**
+on the *default_mnodal.rig* file you can select *Transfer* to 'upload'
+the file from the Windows machine to the SDCard in the teensyExpression.
+
+Please see the [documentation](https://github.com/phorton1/base-Pub-fileClient)
+on the **fileClient** for more detailed information on how to use it.
+
+
 
 ## rPi Kernel upload feature
 
-## Summary of CTRL Keys
 
 
-## Design Details
+
+## Perl and Design Details
 
 Please see the [**Design Document**](design.md) for more detailed information about Buddy.
 
@@ -127,4 +185,4 @@ GNU General Public License for more details.
 
 Please see **LICENSE.TXT** for more information.
 
--- end of readme&#46;md --
+---- end of readme ----
