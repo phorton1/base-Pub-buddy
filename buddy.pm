@@ -705,7 +705,7 @@ sub startFileClient
 	my $params = "-buddy $ACTUAL_SERVER_PORT";
 	my $command = Cava::Packager::IsPackaged() ?
 		Cava::Packager::GetBinPath()."/fileClient.exe $params" :
-		"perl /base/Pub/FC/fileClient.pm $params";
+		"perl /base/Pub/fileClient/fileClient.pm $params";
 		# add 'start' to the previous line to put the fileClient in it's
 		# own dos box, but note that you will not be able to see it exit.
 
