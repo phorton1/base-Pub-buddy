@@ -1,4 +1,4 @@
-package Pub::buddy::buddyColors;
+package apps::buddy::buddyColors;
 use strict;
 use warnings;
 

@@ -2,7 +2,7 @@
 
 Buddy is a general Serial Port and Telnet monitor with many additional features.
 In addition to the source code for Buddy, this repository includes a
-[**Windows Installer**](https://github.com/phorton1/base-Pub-buddy/tree/master/releases)
+[**Windows Installer**](https://github.com/phorton1/base-apps-buddy/tree/master/releases)
 to install a completely ready-to-run version of the program on any *Microsoft Windows*
 machine. Buddy is completely *Open Source Pure Perl*. Some key features of
 Buddy include:
@@ -13,7 +13,7 @@ Buddy include:
   [**circle-bootloader**](https://github.com/phorton1/circle-prh/tree/master/bootloader)
 - works as a
   [*fileServer*](https://github.com/phorton1/base-Pub/tree/master/FS) to the
-  [**fileClient**](https://github.com/phorton1/base-Pub-fileClient) Windows application
+  [**fileClient**](https://github.com/phorton1/base-apps-fileClient) Windows application
   that is automatically installed along with Buddy
 
 Here is a screenshot of Buddy connected to the
@@ -44,7 +44,7 @@ from which I developed the
 box and application that I use with my electric guitar for live looping.
 
 The Windows installation of Buddy.exe also includes the installation of
-[**fileClient.exe**](https://github.com/phorton1/base-Pub-fileClient), which
+[**fileClient.exe**](https://github.com/phorton1/base-apps-fileClient), which
 can work with Buddy to provide a nice Windows application
 to transfer files to and from the SD Card on *Arduino-like* devices. This
 ability was *specifically built* to allow the transfer of **rig files** to
@@ -118,7 +118,7 @@ a list of the CTRL keys that Buddy responds to
 
 - **CTRL-C** - exits Buddy
 - **CTRL-D** - clears the Screen
-- **CTRL-E** - pops up the [fileClient](https://github.com/phorton1/base-Pub-fileClient)
+- **CTRL-E** - pops up the [fileClient](https://github.com/phorton1/base-apps-fileClient)
   if using **-file_server** or **-file_client** command line options
 - **CTRL-X** - initiates an **upload** of a *.img* to the
   [**rPi**](https://github.com/phorton1/circle-prh/tree/master/bootloader)
@@ -131,8 +131,8 @@ per-se, not filtered or interpreted by Buddy.
 ## 4. the fileClient
 
 When you install Buddy with the
-[Windows Installer](https://github.com/phorton1/base-Pub-buddy/tree/master/releases),
-it also installs an executable (EXE) for the [fileClient](https://github.com/phorton1/base-Pub-fileClient).
+[Windows Installer](https://github.com/phorton1/base-apps-buddy/tree/master/releases),
+it also installs an executable (EXE) for the [fileClient](https://github.com/phorton1/base-apps-fileClient).
 
 Although the *fileClient* is a stand-alone general purpose **User Interface** to any
 *fileServer* implemented using my [Pub::FS](https://github.com/phorton1/base-Pub/tree/master/FS)
@@ -161,7 +161,7 @@ to be transferred from one machine to the other.  By **right clicking**
 on the *default_mnodal.rig* file you can select *Transfer* to 'upload'
 the file from the Windows machine to the SDCard in the teensyExpression.
 
-Please see the [documentation](https://github.com/phorton1/base-Pub-fileClient)
+Please see the [documentation](https://github.com/phorton1/base-apps-fileClient)
 on the **fileClient** for more detailed information on how to use it.
 
 

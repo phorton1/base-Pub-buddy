@@ -1,7 +1,7 @@
 #-------------------------------------------
 # uploadBinary - my binary protocol
 #-------------------------------------------
-package Pub::buddy::buddyBinary;
+package apps::buddy::buddyBinary;
 use strict;
 use warnings;
 use Time::HiRes qw( sleep );

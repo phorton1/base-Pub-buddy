@@ -141,7 +141,7 @@
 #   ctrl-L = used to update the rpi SD memory card
 #       in the laptop memory card slot (nothing to do with buddy)
 
-package Pub::buddy::buddy;
+package apps::buddy::buddy;
 use strict;
 use warnings;
 use threads;
@@ -159,9 +159,9 @@ use Pub::ComPorts;
 use Pub::SSDPScan;
 use Pub::FS::SerialBridge;
 use Pub::FS::SerialSession;
-use Pub::buddy::buddyColors;
-use Pub::buddy::buddyBinary;
-use Pub::buddy::buddyGrab;
+use apps::buddy::buddyColors;
+use apps::buddy::buddyBinary;
+use apps::buddy::buddyGrab;
 use sigtrap 'handler', \&onSignal, qw(normal-signals);
 
 $debug_level = -5 if Cava::Packager::IsPackaged();
@@ -705,7 +705,7 @@ sub startFileClient
 	my $params = "-buddy $ACTUAL_SERVER_PORT";
 	my $command = Cava::Packager::IsPackaged() ?
 		Cava::Packager::GetBinPath()."/fileClient.exe $params" :
-		"perl /base/Pub/fileClient/fileClient.pm $params";
+		"perl /base/apps/fileClient/fileClient.pm $params";
 		# add 'start' to the previous line to put the fileClient in it's
 		# own dos box, but note that you will not be able to see it exit.
 
@@ -1042,7 +1042,7 @@ sub readProcessPort
 		if (-f $kernel_filename)
 		{
 			$kernel_file_changed = 0;
-			Pub::buddy::buddyBinary::uploadBinary($com_port,$kernel_filename);
+			apps::buddy::buddyBinary::uploadBinary($com_port,$kernel_filename);
 		}
 		else
 		{

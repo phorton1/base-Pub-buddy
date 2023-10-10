@@ -2,7 +2,7 @@
 # cnc3018 screen grabber
 #-------------------------------------------
 
-package Pub::buddy::buddyGrab;
+package apps::buddy::buddyGrab;
 use strict;
 use warnings;
 

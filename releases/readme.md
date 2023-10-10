@@ -30,19 +30,10 @@ Executable** with confidence.  All of the **source** code for Buddy,
 the fileClient, and all my other programs can be found here on GitHub,
 and I guarantee that they are **free of any malware or adware**.
 
-## Version History
+### Version History
 
-This directory *may* contain more than one Version of the Buddy Installer.
-I will ry to update this **Version History** as I release new versions.
-
-In general **the most recent version is the best version**.
-
-
-## Version 1.0.1 - October 8, 2023
-
-Broke **fileClient** out as a separate repository, renaming
-Perl classes from "Pub::FC" to "Pub::fileClient"
-
-## Version 1.0.0 - October 8, 2023
-
-Initial build with all the pieces of Buddy and fileClient in place.
+| date 			| version 		| notes	                                    |
+| ------------- | ------------- | ----------------------------------------- |
+| 2023-10-10    | 1.0.2			| moved from Pub:: to apps::				|
+| 2023-10-09    | 1.0.1			| moved Pub::FC to Pub::fileClient			|
+| 2023-10-08    | 1.0.0			| initial release							|
