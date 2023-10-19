@@ -106,7 +106,7 @@
 #
 # BUDDY_ARDUINO_NAME	$ARDUINO_PROCESS_NAME	DEFAULT "arduino-builder.exe"
 # BUDDY_ARDUINO_SEM		$ARDUINO_SEMAPHORE_FILE DEFAULT "/junk/in_upload_spiffs.txt";
-# BUDDY_KERNEL_REG		$REGISTRY_FILENAME		DEFAULT "/base/bat/console_autobuild_kernel.txt";
+# BUDDY_KERNEL_REG		$REGISTRY_FILENAME		DEFAULT "/base_data/console_autobuild_kernel.txt";
 
 
 #-------------------------------------------------------------------
@@ -124,7 +124,7 @@
 #       left most kernel.cpp file.  If the first time per
 #       komodo invocation, or if the kernel.cpp is different
 #       than the previous build, komodo writes a new
-#       /base/bat/console_autobuild_kernel.txt pointing
+#       /base_data/console_autobuild_kernel.txt pointing
 #       to the new kernel.img.  The rest happens here.
 #
 #   ctrl-K = build the circle/_prh/bootloader/recovery.img

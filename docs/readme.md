@@ -334,13 +334,13 @@ The only question remaining is "**where is the registry file
 and what is its filename?"**.  For legacy reasons, and because
 I'm generally lazy, so that I didn't have to change my own development
 environment for the few people that might end up using this feature, the
-registry_filename defaults to **"/base/bat/console_autobuild_kernel.txt"**.
+registry_filename defaults to **"/base_data/console_autobuild_kernel.txt"**.
 
 
 ### BUDDY_KERNEL_REG Environment Variable
 
 I might change that in future releaes, but for now,
-unless you want to create a file called */base/bat/console_autobuild_kernel.txt*,
+unless you want to create a file called */base_data/console_autobuild_kernel.txt*,
 **in order to use this feature you will need to set a Environment
 Variable**
 
