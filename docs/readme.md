@@ -65,7 +65,7 @@ and watches out for Arduino IDE builds:
 At least one of the following four options **must** be provided:
 
 - **COM_PORT** - a number by itself on the command line that is less than 100
-- **IP_ADDRESS[:PORT]** - something that looks '192.168.0.100' with an optional colon and port number
+- **IP_ADDRESS\[:PORT]** - something that looks '192.168.0.100' with an optional colon and port number
 - **-auto** - tells buddy to try to find a COM port to open and/or use SSDP to find a network (myIOT) device to connect to
 - **-auto_no_remote** - auto without the SSDP search
 

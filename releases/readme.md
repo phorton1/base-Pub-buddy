@@ -1,7 +1,7 @@
 # Buddy Windows Installer Releases
 
 This directory contains the **Windows Installer** to install **Buddy**
-and the [**fileClient**](https://github.com/phorton1/base-Pub-fileClient)
+and the [**fileClient**](https://github.com/phorton1/base-apps-fileClient)
 to any Microsoft Windows machine.
 
 Buddy itself is *Pure Perl*. The executable (EXE) files installed by this
