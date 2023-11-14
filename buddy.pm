@@ -248,11 +248,13 @@ my $START_FILE_CLIENT:shared = 0;
 # working variables
 #-----------------------
 
-my $console = Win32::Console->new(STD_OUTPUT_HANDLE);
-my $console_in = Win32::Console->new(STD_INPUT_HANDLE);
-$console_in->Mode(ENABLE_MOUSE_INPUT | ENABLE_WINDOW_INPUT );
-$console->Attr($COLOR_CONSOLE);
-$console->SetIcon("$resource_dir/buddy.ico");
+# my $CONSOLE = Win32::Console->new(STD_OUTPUT_HANDLE);
+# now from Pub::Utils
+
+my $CONSOLE_IN = Win32::Console->new(STD_INPUT_HANDLE);
+$CONSOLE_IN->Mode(ENABLE_MOUSE_INPUT | ENABLE_WINDOW_INPUT );
+$CONSOLE->Attr($COLOR_CONSOLE);
+$CONSOLE->SetIcon("$resource_dir/buddy.ico");
 
 my $com_port;
 my $com_sock;;
@@ -283,23 +285,23 @@ sub onSignal
 sub buddyError
 {
 	my ($msg) = @_;
-	$console->Attr($color_red);
+	$CONSOLE->Attr($color_red);
 	print "buddy Error: $msg\n";
-	$console->Attr($COLOR_CONSOLE);
+	$CONSOLE->Attr($COLOR_CONSOLE);
 }
 
 sub buddyWarning
 {
 	my ($msg) = @_;
-	$console->Attr($color_yellow);
+	$CONSOLE->Attr($color_yellow);
 	print "buddy Warning: $msg\n";
-	$console->Attr($COLOR_CONSOLE);
+	$CONSOLE->Attr($COLOR_CONSOLE);
 }
 
 sub buddyMsg
 {
 	my ($msg) = @_;
-	$console->Attr($COLOR_CONSOLE);
+	$CONSOLE->Attr($COLOR_CONSOLE);
 	print "buddy: $msg\n";
 }
 
@@ -315,14 +317,14 @@ sub quit
 		my $done = 0;
 		while (!$done)
 		{
-			if ($console_in->GetEvents())
+			if ($CONSOLE_IN->GetEvents())
 			{
-				my @event = $console_in->Input();
+				my @event = $CONSOLE_IN->Input();
 				$done = getChar(@event);
 			}
 		}
 	}
-	$console->Title("buddy finished");
+	$CONSOLE->Title("buddy finished");
 	kill 6,$$;
 	# exit(0);
 }
@@ -603,7 +605,7 @@ sub showStatus
 	$title .= " -file_server $ACTUAL_SERVER_PORT"
 		if $ACTUAL_SERVER_PORT && $START_FILE_SERVER;
 	$title .= " -rpi $kernel_filename" if $RPI;
-	$console->Title($title);
+	$CONSOLE->Title($title);
 }
 
 
@@ -1014,15 +1016,15 @@ sub readProcessPort
 				my $got_sem = waitSTDOUTSemaphore();
 				if ($is_esc_line)
 				{
-					$console->Cls() if $esc_cls;
-					$console->Attr($esc_color);
+					$CONSOLE->Cls() if $esc_cls;
+					$CONSOLE->Attr($esc_color);
 					$is_esc_line = 0;
 					$esc_cmd = '';
 					$esc_cls = 0;
 					$esc_color = $COLOR_CONSOLE;
 				}
 				print $in_line."\n";
-				$console->Attr($COLOR_CONSOLE);
+				$CONSOLE->Attr($COLOR_CONSOLE);
 				releaseSTDOUTSemaphore() if $got_sem;
 				$do_upload = $kernel_file_changed && $in_line =~ $KERNEL_UPLOAD_RE;
 			}
@@ -1035,7 +1037,7 @@ sub readProcessPort
 		}
 	}	# for each byte
 
-	$console->Flush();
+	$CONSOLE->Flush();
 
 	if ($do_upload)
 	{
@@ -1060,7 +1062,7 @@ display($dbg_buddy,-1,"BUDDY STARTED WITH PID($$)");
 
 processCommandLine(@ARGV);
 
-$console->Title("initializing ...");
+$CONSOLE->Title("initializing ...");
 
 
 checkAuto() if $AUTO;
@@ -1169,9 +1171,9 @@ while (1)
     #---------------------------------------
     # highest priority is ctrl-C
 
-    if ($console_in->GetEvents())
+    if ($CONSOLE_IN->GetEvents())
     {
-        my @event = $console_in->Input();
+        my @event = $CONSOLE_IN->Input();
         # print "got event '@event'\n" if @event;
         if (@event && isEventCtrlC(@event))				# CTRL-C
         {
@@ -1182,11 +1184,11 @@ while (1)
 
 		if (defined($char))
 		{
-			if ($console && ord($char) == 4)            # CTRL-D
+			if ($CONSOLE && ord($char) == 4)            # CTRL-D
 			{
-				$console->Cls();    # clear the screen
+				$CONSOLE->Cls();    # clear the screen
 			}
-			elsif ($console && ord($char) == 5)         # CTRL-E
+			elsif ($CONSOLE && ord($char) == 5)         # CTRL-E
 			{
 				startFileClient();
 			}
