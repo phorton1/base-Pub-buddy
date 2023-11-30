@@ -164,6 +164,9 @@ use apps::buddy::buddyBinary;
 use apps::buddy::buddyGrab;
 use sigtrap 'handler', \&onSignal, qw(normal-signals);
 
+Pub::Utils::initUtils();
+
+
 $debug_level = -5 if Cava::Packager::IsPackaged();
 	# set release debug level
 createSTDOUTSemaphore("buddySTDOUT");
@@ -630,7 +633,7 @@ sub connectSocket
 	{
 		# setsockopt($com_sock, SOL_SOCKET, SO_KEEPALIVE, 1);
 
-		budyNotify(1,"Connected to $SOCK_IP:$SOCK_PORT");
+		buddyNotify(1,"Connected to $SOCK_IP:$SOCK_PORT");
 		binmode $com_sock;
 		$com_sock->blocking(0);
 
