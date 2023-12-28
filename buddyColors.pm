@@ -2,6 +2,10 @@ package apps::buddy::buddyColors;
 use strict;
 use warnings;
 
+# The need for this file has probably been obviated by
+# change to Pub::Utils to consistently support ANSI
+# colors.
+
 BEGIN
 {
  	use Exporter qw( import );
