@@ -913,7 +913,7 @@ sub readProcessPort
 	# Although the below code is cleaner, and acts a little
 	# nicer if you don't care about char-by-char output,
 	# it still does not work in a multi-process environment,
-	# though it somewhat apears to work within threads in
+	# though it somewhat appears to work within threads in
 	# this process.
 
 
