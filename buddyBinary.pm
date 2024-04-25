@@ -52,9 +52,18 @@ sub clearInputBuffer
     my ($BlockingFlags, $InBytes, $OutBytes, $LatchErrorFlags) = $port->status();
     # print ">$BlockingFlags, $InBytes, $OutBytes, $LatchErrorFlags\n";
     my ($t1,$t2) = $port->read($InBytes) if $InBytes;
-    $t2 = '' if !$t1;
-    $t2 =~ s/\n|\r//g;
-    print "clearing input buffer($t2) ...\n" if $t2;
+	if ($t1)
+	{
+		$t2 =~ s/\r//g;
+		$t2 =~ s/\s+$//;
+		# print "clearing input buffer($t2) ...\n" if $t2;
+		my @lines = split(/\n/,$t2);
+		for my $line (@lines)
+		{
+			$line =~ s/^\x1b\[\d+m//;
+			print "<-- $line\n";
+		}
+	}
 }
 
 
@@ -150,6 +159,9 @@ sub uploadBinary
     my $num_blocks = int(($size + $BS_BLOCKSIZE - 1) / $BS_BLOCKSIZE);
     while ($block_num < $num_blocks)
     {
+		print "\n" if $block_num && ($block_num % 300) == 0;
+		print "." if ($block_num % 5) == 0;
+
 redo_block:
 
         clearInputBuffer($port);
@@ -199,6 +211,8 @@ redo_block:
         $num_retries = 0;
     }
 
+	print "\n" if $block_num && ($block_num % 300) != 0;
+	
     print "sending data final checksum ($total_sum) ...\n";
     send32Binary($port,$total_sum);
     $reply = getAckNak($port);

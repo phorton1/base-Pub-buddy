@@ -199,7 +199,7 @@ my $KERNEL_UPLOAD_RE = 'Press <space> within \d+ seconds to upload file';
 
 my $ARDUINO_PROCESS_NAME = 	 $ENV{BUDDY_ARDUINO_NAME}  	|| "arduino-builder.exe";
 my $ARDUINO_SEMAPHORE_FILE = $ENV{BUDDY_ARDUINO_SEM} 	|| "/junk/in_upload_spiffs.txt";
-my $REGISTRY_FILENAME = 	 $ENV{BUDDY_KERNEL_REG} 	|| "/base/bat/console_autobuild_kernel.txt";
+my $REGISTRY_FILENAME = 	 $ENV{BUDDY_KERNEL_REG} 	|| "/base_data/console_autobuild_kernel.txt";
 
 
 #---------------------------
@@ -817,7 +817,8 @@ sub systemCheck
 				$kernel_filename = $filename;
 				buddyMsg("setting kernel_filename to $kernel_filename");
 				$kernel_filetime = getFileTime($kernel_filename);
-				warning($dbg_buddy,0,"could not getFileTime($kernel_filename)");
+				warning($dbg_buddy,0,"could not getFileTime($kernel_filename)")
+					if !$kernel_filetime;
 			}
 		}
 
@@ -969,7 +970,7 @@ sub readProcessPort
 			$is_esc_line = 1;
 		}
 
-		elsif (ord($c) == 10)		# end of line
+		elsif (ord($c) == 10)		# \n == 10 == end of line
 		{
 			# display(0,0,"inline=$in_line");
 
