@@ -104,7 +104,7 @@
 # who might actually want to use this feature, several things
 # can be persistently changed with environment variables.
 #
-# BUDDY_ARDUINO_NAME	$ARDUINO_PROCESS_NAME	DEFAULT "arduino-builder.exe"
+# BUDDY_ARDUINO_RE		$ARDUINO_PROCESS_RE	DEFAULT "arduino-builder.exe"
 # BUDDY_ARDUINO_SEM		$ARDUINO_SEMAPHORE_FILE DEFAULT "/junk/in_upload_spiffs.txt";
 # BUDDY_KERNEL_REG		$REGISTRY_FILENAME		DEFAULT "/base_data/console_autobuild_kernel.txt";
 
@@ -197,9 +197,11 @@ my $KERNEL_UPLOAD_RE = 'Press <space> within \d+ seconds to upload file';
 
 # Psuedo-constants that can be overriden by ENV vars
 
-my $ARDUINO_PROCESS_NAME = 	 $ENV{BUDDY_ARDUINO_NAME}  	|| "arduino-builder.exe";
-my $ARDUINO_SEMAPHORE_FILE = $ENV{BUDDY_ARDUINO_SEM} 	|| "/junk/in_upload_spiffs.txt";
-my $REGISTRY_FILENAME = 	 $ENV{BUDDY_KERNEL_REG} 	|| "/base_data/console_autobuild_kernel.txt";
+my $ARDUINO_PROCESS_RE = 	 $ENV{BUDDY_ARDUINO_RE}  	|| 'arduino-builder\.exe|esptool\.exe';
+my $ARDUINO_SEMAPHORE_FILE = $ENV{BUDDY_ARDUINO_SEM} 	|| '/junk/in_upload_spiffs.txt';
+my $REGISTRY_FILENAME = 	 $ENV{BUDDY_KERNEL_REG} 	|| '/base_data/console_autobuild_kernel.txt';
+
+#
 
 
 #---------------------------
@@ -736,9 +738,9 @@ sub arduino_thread
 			{
 				my $name = $processes{$pid};
 				display($dbg_process+1,0,"pid($pid) = $name") if $name;
-				if ($name eq $ARDUINO_PROCESS_NAME)
+				if ($name =~ $ARDUINO_PROCESS_RE)
 				{
-					display($dbg_process,0,"Found process $ARDUINO_PROCESS_NAME");
+					display($dbg_process,0,"Found process $ARDUINO_PROCESS_RE");
 					$found = 1;
 					last;
 				}
@@ -993,12 +995,12 @@ sub readProcessPort
 					if ($show_request =~ s/(.*$PROTOCOL_BASE64\t.*\t.*\t)//)
 					{
 						my $hdr = $1;
-						display($dbg_request,0,"main loop got file_reply($hdr\t".length($show_request)." encoded bytes)");
+						display($dbg_request,0,"main loop got file_reply($req_num,$hdr)\t".length($show_request)." encoded bytes)");
 					}
 					else
 					{
 						$show_request =~ s/\r/\r\n/g;
-						display($dbg_request,0,"main loop got file_reply($show_request)");
+						display($dbg_request,0,"main loop got file_reply($req_num)\r$show_request)");
 					}
 				}
 				while ($serial_file_reply{$req_num})
