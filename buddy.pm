@@ -1000,7 +1000,7 @@ sub readProcessPort
 					else
 					{
 						$show_request =~ s/\r/\r\n/g;
-						display($dbg_request,0,"main loop got file_reply($req_num)\r$show_request)");
+						display($dbg_request,0,"main loop got file_reply($req_num)\r$show_request");
 					}
 				}
 				while ($serial_file_reply{$req_num})
